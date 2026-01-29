@@ -33,6 +33,51 @@ external PA forecasts.
 
 ---
 
+## Workflow
+
+### 1) Generate the dataset
+This repo expects two exported FanGraphs leaderboards in `data/`:
+- `data/fangraphs_batters_2021_2025_standard.csv`
+- `data/fangraphs_batters_2021_2025_advanced.csv`
+
+Then build the model dataset:
+```sh
+Rscript data/build_fangraphs_batters_from_leaderboards.R
+```
+
+That script:
+- Filters to 2021–2025
+- Keeps seasons with `PA >= 100`
+- Keeps players with `>= 100 PA` in either 2024 or 2025
+- Drops high‑NA covariates (>20% missing) and any players with remaining missing covariates
+- Writes `data/fangraphs_batters_2021_2025.csv`
+
+### 2) Fit the model (Stan)
+```sh
+Rscript models/fit_model.R
+```
+
+Outputs:
+- `models/model_fit.rds`
+- `models/model_inputs.rds`
+- `results/projections/category_projections_2026.csv`
+
+### 3) Composite projections (optional)
+```sh
+Rscript results/scripts/build_composite_projections.R
+```
+
+Outputs:
+- `results/projections/composite_projections_2026.csv`
+
+### 4) Latent fit plots (optional)
+```sh
+Rscript results/scripts/plot_latent_fit_top100_by_category.R
+```
+
+Outputs:
+- `results/plots/latent_fit_top100_<CATEGORY>.pdf`
+
 ## Model Specification (Math Notation)
 
 ### Notation
