@@ -1,12 +1,12 @@
 # PHASM
-## Probabilistic Hierarchical Autoregressive Sabermetric Model
+## Probabilistic hierarchical autoregressive sabermetric model
 
 PHASM is a Bayesian projection system for MLB hitters. It combines multivariate outcome modeling,
 hierarchical player/position effects, and AR(1) year trends to produce probabilistic forecasts of
 per-PA rates and rate stats. The system also supports total-count projections when paired with
 external PA forecasts.
 
-## What This Does
+## What this does
 - Fits a joint multivariate Bayesian model (rstan) for H, R, RBI, HR, SB (per-PA rates) plus AVG, OBP, SLG.
 - Uses age/aging curve and position.
 - Player random intercepts and age slopes; position random intercepts and age/age^2 slopes.
@@ -21,7 +21,7 @@ external PA forecasts.
   - `models/model_inputs.rds`
   - `results/projections/category_projections_2026.csv`
 
-## Covariates Used
+## Covariates used
 - Age (standardized) and age^2
 
 ## Notes
@@ -36,20 +36,15 @@ external PA forecasts.
 ## Workflow
 
 ### 1) Generate the dataset
-This repo expects two exported FanGraphs leaderboards in `data/`:
-- `data/fangraphs_batters_2021_2025_standard.csv`
-- `data/fangraphs_batters_2021_2025_advanced.csv`
-
-Then build the model dataset:
+This repo pulls FanGraphs data via `baseballr` and builds the model dataset:
 ```sh
-Rscript data/build_fangraphs_batters_from_leaderboards.R
+Rscript data/build_fangraphs_batters_from_baseballr.R
 ```
 
 That script:
-- Filters to 2021–2025
+- Fetches 2021–2025 batting leaderboards from FanGraphs (requires internet)
 - Keeps seasons with `PA >= 100`
 - Keeps players with `>= 100 PA` in either 2024 or 2025
-- Drops high‑NA covariates (>20% missing) and any players with remaining missing covariates
 - Writes `data/fangraphs_batters_2021_2025.csv`
 
 ### 2) Fit the model (Stan)
@@ -78,7 +73,7 @@ Rscript results/scripts/plot_latent_fit_top100_by_category.R
 Outputs:
 - `results/plots/latent_fit_top100_<CATEGORY>.pdf`
 
-## Model Specification (Math Notation)
+## Model specification
 
 ### Notation
 - Players $i = 1..I$, positions $p = 1..P$, years $y = 1..Y$
@@ -86,7 +81,7 @@ Outputs:
 - Count outcomes: $k = 1..5$; continuous outcomes: $k = 6..8$
 - Observations indexed by $n = 1..N$, each with player $i[n]$, position $p[n]$, year $y[n]$
 
-### Data and Transforms
+### Data and transforms
 - $PA_n$: plate appearances for observation $n$
 - Count outcomes: $y_{n,k}$ for $k=1..5$
 - Continuous outcomes:
@@ -97,12 +92,12 @@ Outputs:
   - $o_n = \text{logit}(OBP_n)$
   - $s_n = \log(SLG_n + \varepsilon)$
 
-### Design Matrices
+### Design matrices
 - $X_n$: fixed effects row (intercept, age, age$^2$)
 - $Z^{\text{pos}}_n$: position random effect predictors (intercept, age, age$^2$)
 - $Z^{\text{player}}_n$: player random effect predictors (intercept, age)
 
-### Linear Predictors (for each outcome k)
+### Linear predictors (for each outcome k)
 
 $$
 \eta_{n,k} = X_n \beta_k
@@ -132,7 +127,7 @@ $$
  s_n \sim \mathcal{N}(\eta_{n,8}, \sigma_8).
 $$
 
-### Random Effects
+### Random effects
 - Player random effects use $\{\text{intercept}, \text{age}\}$:
 
 $$
@@ -151,7 +146,7 @@ $$
  \Sigma^{\text{group}}_r = \text{diag}(\sigma^{\text{group}}_r)\, \Omega^{\text{group}}_r\, \text{diag}(\sigma^{\text{group}}_r).
 $$
 
-### Year Effects (AR(1))
+### Year effects (AR(1))
 - For each outcome $k$:
 
 $$
@@ -159,11 +154,11 @@ $$
  \gamma_{k,y} \sim \mathcal{N}(\rho_k \gamma_{k,y-1}, \sigma_{\text{year},k}),\; y=2..Y.
 $$
 
-### 2026 Projection
+### 2026 projection
 - Draw $\gamma_{k,Y+1} \sim \mathcal{N}(\rho_k\gamma_{k,Y}, \sigma_{\text{year},k})$
 - Predict $\eta_{n,k}$ for 2026 using age and age$^2$ (with age incremented by +1 from the most recent season), plus the drawn 2026 year effect
 
-### Priors (Aligned with Stan Prior Recommendations)
+### Priors (aligned with Stan prior recommendations)
 - Fixed effects (standardized predictors): $\beta_k \sim \mathcal{N}(0, 2.5^2)$
 - Random effect scales (half-normal): $\sigma^{\text{player}}_r, \sigma^{\text{pos}}_r \sim \mathcal{N}^+(0, 1)$
 - Non-centered random effects: $z^{\text{player}}_r, z^{\text{pos}}_r \sim \mathcal{N}(0, 2.5^2)$
@@ -171,6 +166,6 @@ $$
 - Year AR(1) parameters: $\rho_k \sim \mathcal{N}(0, 0.5)$, $\sigma_{\text{year},k} \sim \mathcal{N}^+(0, 1)$
 - Continuous outcome noise: $\sigma_k \sim \mathcal{N}^+(0, 1)$
 
-### Notes (Model)
+### Notes
 - Count outcomes are forecasted as rates per PA; totals require a separate PA model.
 - Seasons with PA < 100 are excluded from the dataset before fitting.
