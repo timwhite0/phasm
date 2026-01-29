@@ -65,7 +65,15 @@ Rscript results/scripts/build_composite_projections.R
 Outputs:
 - `results/projections/composite_projections_2026.csv`
 
-### 4) Latent fit plots (optional)
+### 4) Top 20 composites by position (optional)
+```sh
+Rscript results/scripts/build_top20_composite_by_position.R
+```
+
+Outputs:
+- `results/projections/top20_composite_by_position.md`
+
+### 5) Latent fit plots (optional)
 ```sh
 Rscript results/scripts/plot_latent_fit_top100_by_category.R
 ```
