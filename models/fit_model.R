@@ -15,8 +15,8 @@ message(sprintf("detectCores=%d, mc.cores=%d", cores, getOption("mc.cores")))
 input_path <- "data/fangraphs_batters_2021_2025.csv"
 stan_path <- "models/model.stan"
 output_projection_path <- "results/category_projections_2026.csv"
-output_fit_path <- "results/fangraphs_model_fit.rds"
-output_prep_path <- "results/fangraphs_model_inputs.rds"
+output_fit_path <- "models/model_fit.rds"
+output_prep_path <- "models/model_inputs.rds"
 
 run_fit <- TRUE
 chains <- as.integer(Sys.getenv("STAN_CHAINS", "4"))

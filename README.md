@@ -17,8 +17,8 @@ external PA forecasts.
 - R driver: `models/fit_model.R`
 - Inputs: `data/fangraphs_batters_2021_2025.csv`
 - Outputs (after fitting):
-  - `results/fangraphs_model_fit.rds`
-  - `results/fangraphs_model_inputs.rds`
+  - `models/model_fit.rds`
+  - `models/model_inputs.rds`
   - `results/projections/category_projections_2026.csv`
 
 ## Covariates Used
@@ -76,7 +76,7 @@ $$
 equivalently:
 
 $$
- y_{n,k} \sim \text{Poisson\_log}(\eta_{n,k} + \log(PA_n)).
+ y_{n,k} \sim \text{logPoisson}(\eta_{n,k} + \log(PA_n)).
 $$
 
 - Continuous outcomes:

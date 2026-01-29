@@ -4,7 +4,7 @@ suppressPackageStartupMessages({
   library(ggplot2)
 })
 
-fit_path <- 'results/fangraphs_model_fit.rds'
+fit_path <- 'models/model_fit.rds'
 input_path <- 'data/fangraphs_batters_2021_2025.csv'
 proj_path <- 'results/projections/category_projections_2026.csv'
 results_dir <- 'results/plots'
