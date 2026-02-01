@@ -42,8 +42,8 @@ pa <- pa %>%
 proj <- proj %>%
   left_join(pa, by = "playerid")
 
-count_cats <- c("H", "RBI", "SB", "HR")
-rate_cats <- c("R", "AVG", "OBP", "SLG")
+count_cats <- c("H", "R", "RBI", "SB", "HR")
+rate_cats <- c("AVG", "OBP", "SLG")
 
 build_category_df <- function(cat) {
   mean_col <- paste0(cat, "_mean")
