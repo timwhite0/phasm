@@ -1,41 +1,52 @@
 # PHASM
 ## Probabilistic hierarchical autoregressive sabermetric model
 
-PHASM is a Bayesian projection system for MLB hitters. It combines multivariate outcome modeling,
-hierarchical player/position effects, and AR(1) year trends to produce probabilistic forecasts of
-per-PA rates and rate stats. The system also supports total-count projections when paired with
-external PA forecasts.
+PHASM is a Bayesian projection system for MLB hitters and pitchers. It combines multivariate outcome
+modeling, hierarchical player/position effects, and AR(1) year trends to produce
+probabilistic forecasts of per-PA/per-IP rates and rate stats. The system also supports total-count
+projections when paired with external PA/IP forecasts.
 
 ## What this does
 - Fits a joint multivariate Bayesian model (rstan) for H, R, RBI, HR, SB (per-PA rates) plus AVG, OBP, SLG.
-- Uses age/aging curve and position.
+- Fits a joint multivariate Bayesian model (rstan) for SO, BB, H, ER (per-IP rates).
+- Uses age/aging curve and position (hitters); the current pitcher model is SP-only.
 - Player random intercepts and age slopes; position random intercepts and age/age^2 slopes.
 - Year random intercepts with AR(1) evolution.
 
 ## Files
-- Stan model: `models/model.stan`
-- R driver: `models/fit_model.R`
-- Inputs: `data/fangraphs_batters_2018_2025.csv`
-- Outputs (after fitting):
+- Hitter Stan model: `models/model.stan`
+- Hitter R driver: `models/fit_model.R`
+- Pitcher Stan model: `models/pitcher_model.stan`
+- Pitcher R driver: `models/fit_pitcher_model.R`
+- Hitter inputs: `data/fangraphs_batters_2018_2025.csv`
+- Pitcher inputs: `data/fangraphs_pitchers_2018_2025.csv`
+- Hitter outputs (after fitting):
   - `models/model_fit.rds`
   - `models/model_inputs.rds`
   - `results/projections/category_projections_2026.csv`
+- Pitcher outputs (after fitting):
+  - `models/pitcher_model_fit.rds`
+  - `models/pitcher_model_inputs.rds`
+  - `results/projections/pitcher_category_projections_2026.csv`
 
 ## Covariates used
 - Age (standardized) and age^2
+- SP-only pitcher model (no role random effects)
 
 ## Notes
 - 2026 covariates are taken from the most recent season per player (age advanced by +1).
 - Count outcomes are modeled as Poisson with a log(PA) offset; projections are per-PA rates.
+- Pitcher count outcomes are modeled as Poisson with a log(IP) offset; projections are per-IP rates.
 - AVG/OBP use a logit transform; SLG uses log(SLG + 1e-4).
 - Handedness and Statcast covariates are excluded by design.
 - Seasons with PA < 100 are excluded from the dataset before fitting.
+- Seasons with IP < 20 are excluded from the pitcher dataset before fitting.
 
 ---
 
 ## Workflow
 
-### 1) Generate the dataset
+### 1) Generate the hitter dataset
 This repo pulls FanGraphs data via `baseballr` and builds the model dataset:
 ```sh
 Rscript data/build_fangraphs_batters_from_baseballr.R
@@ -47,7 +58,7 @@ That script:
 - Keeps players with `>= 100 PA` in either 2024 or 2025
 - Writes `data/fangraphs_batters_2018_2025.csv`
 
-### 2) Fit the model (Stan)
+### 2) Fit the hitter model (Stan)
 ```sh
 Rscript models/fit_model.R
 ```
@@ -73,15 +84,91 @@ Rscript results/scripts/build_top20_composite_by_position.R
 Outputs:
 - `results/projections/top20_composite_by_position.md`
 
-### 5) Latent fit plots (optional)
+### 5) Hitter latent fit plots (optional)
 ```sh
 Rscript results/scripts/plot_latent_fit_top100_by_category.R
 ```
 
 Outputs:
-- `results/plots/latent_fit_top100_<CATEGORY>.pdf`
+- `results/plots/latent_fits/latent_fit_top100_<CATEGORY>.pdf`
+
+### 6) Generate the pitcher dataset
+```sh
+Rscript data/build_fangraphs_pitchers_from_baseballr.R
+```
+
+That script:
+- Fetches 2018–2025 pitching leaderboards from FanGraphs (requires internet)
+- Keeps seasons with `IP >= 20`
+- Keeps pitchers with `>= 20 IP` in either 2024 or 2025
+- Writes `data/fangraphs_pitchers_2018_2025.csv`
+
+### 7) Fit the pitcher model (Stan)
+```sh
+Rscript models/fit_pitcher_model.R
+```
+
+Outputs:
+- `models/pitcher_model_fit.rds`
+- `models/pitcher_model_inputs.rds`
+- `results/projections/pitcher_category_projections_2026.csv`
+
+### 8) Pitcher latent fit plots (optional)
+```sh
+Rscript results/scripts/plot_latent_fit_top100_by_pitcher_category.R
+```
+
+Outputs:
+- `results/plots/latent_fits/pitcher_latent_fit_top100_<CATEGORY>.pdf`
+
+### 8b) Pitcher derived latent fits (optional)
+```sh
+Rscript results/scripts/plot_latent_fit_top100_pitcher_derived.R
+```
+
+Outputs:
+- `results/plots/latent_fits/pitcher_latent_fit_derived_<METRIC>.pdf`
+
+### 9) 2026 interval projections by position (optional)
+```sh
+Rscript results/scripts/plot_2026_intervals_by_position.R
+```
+
+Outputs:
+- `results/plots/position_intervals/projection_intervals_2026_<POSITION>.pdf`
+
+### 10) Pitcher 2026 interval projections by role (optional)
+```sh
+Rscript results/scripts/plot_2026_pitcher_intervals_by_role.R
+```
+
+Outputs:
+- `results/plots/position_intervals/pitcher_intervals_2026_<ROLE>.pdf`
+
+### 11) Pitcher composite projections (optional)
+```sh
+Rscript results/scripts/build_pitcher_composite_projections.R
+```
+
+Outputs:
+- `results/projections/pitcher_composite_projections_2026.csv`
+
+### 12) Top 50 pitcher composite by role (optional)
+```sh
+Rscript results/scripts/build_top50_pitcher_composite_by_role.R
+```
+
+Outputs:
+- `results/projections/top50_pitcher_composite_by_role.md`
+
+## Pitcher model notes
+- Current pitcher model is SP-only (2018–2025) and models SO, BB, H, ER as per-IP rates.
+- Pitcher outcomes are modeled as Poisson with a log(IP) offset.
+- Role effects and SV/HLD/QS/W are omitted in the current SP-only run.
 
 ## Model specification
+The sections below describe the hitter model. The current pitcher model uses the same backbone but
+is SP-only, uses IP instead of PA for the offset, and models SO, BB, H, and ER.
 
 ### Notation
 - Players $i = 1..I$, positions $p = 1..P$, years $y = 1..Y$

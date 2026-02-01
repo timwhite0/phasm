@@ -5,25 +5,73 @@ suppressPackageStartupMessages({
 })
 
 fit_path <- 'models/pitcher_model_fit.rds'
+prep_path <- 'models/pitcher_model_inputs.rds'
 input_path <- 'data/fangraphs_pitchers_2018_2025.csv'
-proj_path <- 'results/projections/pitcher_category_projections_2026.csv'
 results_dir <- 'results/plots/latent_fits'
 
 if (!dir.exists('results')) dir.create('results')
 if (!dir.exists(results_dir)) dir.create(results_dir)
 
-proj <- read_csv(proj_path, show_col_types = FALSE) %>%
-  mutate(playerid = as.character(playerid))
+prep <- readRDS(prep_path)
 
 cat_defs <- list(
   SO = 'SO_mean',
   BB = 'BB_mean',
   H = 'H_mean',
-  ER = 'ER_mean',
-  SV = 'SV_mean',
-  HLD = 'HLD_mean',
-  W = 'W_mean',
-  QS = 'QS_mean'
+  ER = 'ER_mean'
+)
+
+fit <- readRDS(fit_path)
+raw <- read_csv(input_path, show_col_types = FALSE) %>%
+  mutate(Season = as.integer(Season)) %>%
+  filter(Season >= 2018, Season <= 2025) %>%
+  filter(Role == "SP")
+
+age_mean <- mean(raw$Age, na.rm = TRUE)
+age_sd <- sd(raw$Age, na.rm = TRUE)
+raw <- raw %>%
+  mutate(
+    age_c = (Age - age_mean) / age_sd,
+    age2 = age_c^2,
+    player_id = as.integer(factor(playerid))
+  )
+
+years <- sort(unique(raw$Season))
+
+post <- rstan::extract(fit)
+eta_pred <- post$eta_pred
+beta <- post$beta
+beta_zip <- NULL
+u_role <- NULL
+u_player <- post$u_player
+year_effect <- post$year_effect
+n_iter <- dim(beta)[1]
+K <- dim(beta)[3]
+
+summarize_draws <- function(x) {
+  c(
+    mean = mean(x, na.rm = TRUE),
+    p05 = as.numeric(quantile(x, 0.05, na.rm = TRUE)),
+    p50 = as.numeric(quantile(x, 0.5, na.rm = TRUE)),
+    p95 = as.numeric(quantile(x, 0.95, na.rm = TRUE))
+  )
+}
+
+summarize_matrix <- function(draws_3d) {
+  t(apply(draws_3d, 2, summarize_draws))
+}
+
+proj <- prep$player_lookup %>%
+  mutate(playerid = as.character(playerid)) %>%
+  distinct()
+
+rate_pred <- exp(eta_pred)
+proj <- bind_cols(
+  proj,
+  setNames(as.data.frame(summarize_matrix(rate_pred[, , 1])), c("SO_mean", "SO_p05", "SO_p50", "SO_p95")),
+  setNames(as.data.frame(summarize_matrix(rate_pred[, , 2])), c("BB_mean", "BB_p05", "BB_p50", "BB_p95")),
+  setNames(as.data.frame(summarize_matrix(rate_pred[, , 3])), c("H_mean", "H_p05", "H_p50", "H_p95")),
+  setNames(as.data.frame(summarize_matrix(rate_pred[, , 4])), c("ER_mean", "ER_p05", "ER_p50", "ER_p95"))
 )
 
 cat_top <- list()
@@ -35,39 +83,6 @@ for (cat in names(cat_defs)) {
     arrange(desc(.data[[col]])) %>%
     slice(1:100) %>%
     pull(playerid)
-}
-
-fit <- readRDS(fit_path)
-raw <- read_csv(input_path, show_col_types = FALSE) %>%
-  mutate(Season = as.integer(Season))
-
-age_mean <- mean(raw$Age, na.rm = TRUE)
-age_sd <- sd(raw$Age, na.rm = TRUE)
-raw <- raw %>%
-  mutate(
-    age_c = (Age - age_mean) / age_sd,
-    age2 = age_c^2,
-    player_id = as.integer(factor(playerid)),
-    role_raw = if_else(is.na(Role) | Role == "", "UNK", Role),
-    role_id = as.integer(factor(role_raw))
-  )
-
-years <- sort(unique(raw$Season))
-
-post <- rstan::extract(fit)
-beta <- post$beta
-u_role <- post$u_role
-u_player <- post$u_player
-year_effect <- post$year_effect
-n_iter <- dim(beta)[1]
-K <- dim(beta)[3]
-
-summarize_draws <- function(x) {
-  c(
-    mean = mean(x, na.rm = TRUE),
-    p10 = as.numeric(quantile(x, 0.1, na.rm = TRUE)),
-    p90 = as.numeric(quantile(x, 0.9, na.rm = TRUE))
-  )
 }
 
 outcomes <- names(cat_defs)
@@ -84,18 +99,12 @@ for (o in outcomes) {
     age_c = subset$age_c,
     age2 = subset$age2
   )
-  Z_role <- cbind(
-    intercept = 1,
-    age_c = subset$age_c,
-    age2 = subset$age2
-  )
   Z_player <- cbind(
     intercept = 1,
     age_c = subset$age_c
   )
 
   player_id <- subset$player_id
-  role_id <- subset$role_id
   year_id <- match(subset$Season, years)
 
   n_rows <- nrow(subset)
@@ -103,19 +112,19 @@ for (o in outcomes) {
 
   for (i in seq_len(n_rows)) {
     x_i <- X[i, ]
-    zr_i <- Z_role[i, ]
     zpl_i <- Z_player[i, ]
     pid <- player_id[i]
-    role <- role_id[i]
     yid <- year_id[i]
 
     eta <- matrix(0, nrow = n_iter, ncol = K)
     for (k in 1:K) {
       eta[, k] <- beta[, 1, k] * x_i[1] + beta[, 2, k] * x_i[2] + beta[, 3, k] * x_i[3]
     }
-    for (r in 1:3) {
-      for (k in 1:K) {
-        eta[, k] <- eta[, k] + zr_i[r] * u_role[, r, role, k]
+    if (!is.null(u_role)) {
+      for (r in 1:3) {
+        for (k in 1:K) {
+          eta[, k] <- eta[, k] + zr_i[r] * u_role[, r, role, k]
+        }
       }
     }
     for (r in 1:2) {
@@ -133,11 +142,7 @@ for (o in outcomes) {
       SO = summarize_draws(rate_count[, 1]),
       BB = summarize_draws(rate_count[, 2]),
       H = summarize_draws(rate_count[, 3]),
-      ER = summarize_draws(rate_count[, 4]),
-      SV = summarize_draws(rate_count[, 5]),
-      HLD = summarize_draws(rate_count[, 6]),
-      W = summarize_draws(rate_count[, 7]),
-      QS = summarize_draws(rate_count[, 8])
+      ER = summarize_draws(rate_count[, 4])
     )
   }
 
@@ -154,8 +159,8 @@ for (o in outcomes) {
       outcome = o,
       observed = obs_val,
       fitted_mean = sum_o['mean'],
-      fitted_p10 = sum_o['p10'],
-      fitted_p90 = sum_o['p90'],
+      fitted_p05 = sum_o['p05'],
+      fitted_p95 = sum_o['p95'],
       type = 'fit',
       stringsAsFactors = FALSE
     )
@@ -164,8 +169,8 @@ for (o in outcomes) {
   plot_df <- bind_rows(plot_rows) %>% arrange(PlayerName, Season)
 
   mean_col <- paste0(o, '_mean')
-  p10_col <- paste0(o, '_p10')
-  p90_col <- paste0(o, '_p90')
+  p05_col <- paste0(o, '_p05')
+  p95_col <- paste0(o, '_p95')
   if (mean_col %in% names(proj)) {
     proj_df <- proj %>%
       filter(playerid %in% ids) %>%
@@ -176,8 +181,8 @@ for (o in outcomes) {
         outcome = o,
         observed = NA_real_,
         fitted_mean = .data[[mean_col]],
-        fitted_p10 = .data[[p10_col]],
-        fitted_p90 = .data[[p90_col]],
+        fitted_p05 = .data[[p05_col]],
+        fitted_p95 = .data[[p95_col]],
         type = 'projection'
       )
     plot_df <- bind_rows(plot_df, proj_df)
@@ -192,21 +197,24 @@ for (o in outcomes) {
   write_csv(plot_df, file.path(results_dir, paste0('pitcher_latent_fit_top100_', o, '_data.csv')))
 
   p <- ggplot(plot_df, aes(x = Season, group = PlayerName)) +
-    geom_linerange(aes(ymin = fitted_p10, ymax = fitted_p90, color = type), linewidth = 0.6, alpha = 0.7, na.rm = TRUE) +
-    geom_line(data = plot_df %>% filter(type == 'fit'), aes(y = fitted_mean), color = '#1f77b4', linewidth = 0.7) +
-    geom_point(data = plot_df %>% filter(type == 'fit'), aes(y = fitted_mean), color = '#1f77b4', size = 1.6) +
-    geom_point(data = plot_df %>% filter(type == 'projection'), aes(y = fitted_mean), color = '#2ca02c', size = 1.8, shape = 17) +
-    geom_point(aes(y = observed), color = '#d62728', size = 1.4, na.rm = TRUE) +
+    geom_linerange(aes(ymin = fitted_p05, ymax = fitted_p95, color = type), linewidth = 0.6, alpha = 0.7, na.rm = TRUE) +
+    geom_line(data = plot_df %>% filter(type == 'fit'), aes(y = fitted_mean), color = 'goldenrod', linewidth = 0.7) +
+    geom_point(data = plot_df %>% filter(type == 'fit'), aes(y = fitted_mean), color = 'goldenrod', size = 1.6) +
+    geom_point(data = plot_df %>% filter(type == 'projection'), aes(y = fitted_mean), color = 'dodgerblue', size = 1.8, shape = 17) +
+    geom_point(aes(y = observed), color = 'black', size = 1.4, na.rm = TRUE) +
     facet_wrap(~ PlayerName, scales = 'fixed') +
     theme_minimal(base_size = 10) +
     scale_x_continuous(breaks = 2018:2026) +
-    scale_color_manual(values = c(fit = '#1f77b4', projection = '#2ca02c')) +
+    scale_color_manual(values = c(fit = 'goldenrod', projection = 'dodgerblue')) +
     labs(
-      title = paste0(o, ': observed (red), fitted (blue), 2026 proj (green)'),
+      title = paste0(o, ': observed (black), fitted (goldenrod), 2026 proj (dodgerblue)'),
       y = paste0(o, ' per IP'),
       x = 'Season'
     ) +
-    theme(legend.position = 'none')
+    theme(
+      legend.position = 'none',
+      strip.text = element_text(face = 'bold')
+    )
 
   ggsave(filename = file.path(results_dir, paste0('pitcher_latent_fit_top100_', o, '.pdf')),
          plot = p, width = 18, height = 12)
