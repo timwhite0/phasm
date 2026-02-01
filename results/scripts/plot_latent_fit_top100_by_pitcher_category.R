@@ -80,7 +80,7 @@ for (cat in names(cat_defs)) {
   if (!col %in% names(proj)) next
   cat_top[[cat]] <- proj %>%
     filter(!is.na(.data[[col]])) %>%
-    arrange(desc(.data[[col]])) %>%
+    {if (cat %in% c("H", "BB", "ER")) arrange(., .data[[col]]) else arrange(., desc(.data[[col]]))} %>%
     slice(1:100) %>%
     pull(playerid)
 }
@@ -189,9 +189,13 @@ for (o in outcomes) {
   }
 
   order_df <- plot_df %>%
-    filter(Season == 2026L) %>%
-    arrange(desc(fitted_mean)) %>%
-    distinct(PlayerName)
+    filter(Season == 2026L)
+  if (o %in% c("H", "BB", "ER")) {
+    order_df <- order_df %>% arrange(fitted_mean)
+  } else {
+    order_df <- order_df %>% arrange(desc(fitted_mean))
+  }
+  order_df <- order_df %>% distinct(PlayerName)
   plot_df$PlayerName <- factor(plot_df$PlayerName, levels = order_df$PlayerName)
 
   write_csv(plot_df, file.path(results_dir, paste0('pitcher_latent_fit_top100_', o, '_data.csv')))
@@ -207,7 +211,7 @@ for (o in outcomes) {
     scale_x_continuous(breaks = 2018:2026) +
     scale_color_manual(values = c(fit = 'goldenrod', projection = 'dodgerblue')) +
     labs(
-      title = paste0(o, ': observed (black), fitted (goldenrod), 2026 proj (dodgerblue)'),
+      title = paste0(o, ' per IP: observed (black), fitted (goldenrod), 2026 proj (dodgerblue)'),
       y = paste0(o, ' per IP'),
       x = 'Season'
     ) +
