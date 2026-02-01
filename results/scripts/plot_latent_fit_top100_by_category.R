@@ -5,7 +5,7 @@ suppressPackageStartupMessages({
 })
 
 fit_path <- 'models/model_fit.rds'
-input_path <- 'data/fangraphs_batters_2021_2025.csv'
+input_path <- 'data/fangraphs_batters_2018_2025.csv'
 proj_path <- 'results/projections/category_projections_2026.csv'
 results_dir <- 'results/plots'
 

@@ -4,9 +4,9 @@ suppressPackageStartupMessages({
   library(baseballr)
 })
 
-start_season <- 2021
+start_season <- 2018
 end_season <- 2025
-output_path <- "data/fangraphs_batters_2021_2025.csv"
+output_path <- "data/fangraphs_batters_2018_2025.csv"
 
 fg <- lapply(seq(start_season, end_season), function(season) {
   message(sprintf("Fetching FanGraphs batting leaders for %d", season))

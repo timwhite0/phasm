@@ -12,7 +12,7 @@ options(mc.cores = cores)
 message(sprintf("detectCores=%d, mc.cores=%d", cores, getOption("mc.cores")))
 
 # Config
-input_path <- "data/fangraphs_batters_2021_2025.csv"
+input_path <- "data/fangraphs_batters_2018_2025.csv"
 stan_path <- "models/model.stan"
 output_projection_path <- "results/projections/category_projections_2026.csv"
 output_fit_path <- "models/model_fit.rds"

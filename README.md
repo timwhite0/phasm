@@ -15,7 +15,7 @@ external PA forecasts.
 ## Files
 - Stan model: `models/model.stan`
 - R driver: `models/fit_model.R`
-- Inputs: `data/fangraphs_batters_2021_2025.csv`
+- Inputs: `data/fangraphs_batters_2018_2025.csv`
 - Outputs (after fitting):
   - `models/model_fit.rds`
   - `models/model_inputs.rds`
@@ -42,10 +42,10 @@ Rscript data/build_fangraphs_batters_from_baseballr.R
 ```
 
 That script:
-- Fetches 2021–2025 batting leaderboards from FanGraphs (requires internet)
+- Fetches 2018–2025 batting leaderboards from FanGraphs (requires internet)
 - Keeps seasons with `PA >= 100`
 - Keeps players with `>= 100 PA` in either 2024 or 2025
-- Writes `data/fangraphs_batters_2021_2025.csv`
+- Writes `data/fangraphs_batters_2018_2025.csv`
 
 ### 2) Fit the model (Stan)
 ```sh
