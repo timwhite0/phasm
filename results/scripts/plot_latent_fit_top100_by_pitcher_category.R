@@ -7,7 +7,7 @@ suppressPackageStartupMessages({
 fit_path <- 'models/pitcher_model_fit.rds'
 prep_path <- 'models/pitcher_model_inputs.rds'
 input_path <- 'data/fangraphs_pitchers_2018_2025.csv'
-results_dir <- 'results/plots/latent_fits'
+results_dir <- 'results/plots/latent_fits/pitchers'
 
 if (!dir.exists('results')) dir.create('results')
 if (!dir.exists(results_dir)) dir.create(results_dir)
@@ -18,7 +18,9 @@ cat_defs <- list(
   SO = 'SO_mean',
   BB = 'BB_mean',
   H = 'H_mean',
-  ER = 'ER_mean'
+  ER = 'ER_mean',
+  W = 'W_mean',
+  QS = 'QS_mean'
 )
 
 fit <- readRDS(fit_path)
@@ -71,7 +73,9 @@ proj <- bind_cols(
   setNames(as.data.frame(summarize_matrix(rate_pred[, , 1])), c("SO_mean", "SO_p05", "SO_p50", "SO_p95")),
   setNames(as.data.frame(summarize_matrix(rate_pred[, , 2])), c("BB_mean", "BB_p05", "BB_p50", "BB_p95")),
   setNames(as.data.frame(summarize_matrix(rate_pred[, , 3])), c("H_mean", "H_p05", "H_p50", "H_p95")),
-  setNames(as.data.frame(summarize_matrix(rate_pred[, , 4])), c("ER_mean", "ER_p05", "ER_p50", "ER_p95"))
+  setNames(as.data.frame(summarize_matrix(rate_pred[, , 4])), c("ER_mean", "ER_p05", "ER_p50", "ER_p95")),
+  setNames(as.data.frame(summarize_matrix(rate_pred[, , 5])), c("W_mean", "W_p05", "W_p50", "W_p95")),
+  setNames(as.data.frame(summarize_matrix(rate_pred[, , 6])), c("QS_mean", "QS_p05", "QS_p50", "QS_p95"))
 )
 
 cat_top <- list()
@@ -142,7 +146,9 @@ for (o in outcomes) {
       SO = summarize_draws(rate_count[, 1]),
       BB = summarize_draws(rate_count[, 2]),
       H = summarize_draws(rate_count[, 3]),
-      ER = summarize_draws(rate_count[, 4])
+      ER = summarize_draws(rate_count[, 4]),
+      W = summarize_draws(rate_count[, 5]),
+      QS = summarize_draws(rate_count[, 6])
     )
   }
 

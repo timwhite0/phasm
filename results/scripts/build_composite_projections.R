@@ -1,7 +1,7 @@
 library(readr)
 library(dplyr)
 
-proj <- read_csv('results/projections/category_projections_2026.csv', show_col_types = FALSE)
+proj <- read_csv('results/projections/batters/category_projections_2026.csv', show_col_types = FALSE)
 atc <- read_csv('data/atc_pa_projections_2026.csv', show_col_types = FALSE)
 
 need_cols <- c('playerid','PlayerName','position',
@@ -57,5 +57,5 @@ out <- vals_z %>%
   select(playerid, PlayerName, position, PA_atc, composite_zscore,
          z_HR, z_R, z_RBI, z_SB, z_OBP, z_SLG)
 
-write_csv(out, 'results/projections/composite_projections_2026.csv')
-cat('Wrote results/projections/composite_projections_2026.csv\n')
+write_csv(out, 'results/projections/batters/composite_projections_2026.csv')
+cat('Wrote results/projections/batters/composite_projections_2026.csv\n')

@@ -7,7 +7,7 @@ suppressPackageStartupMessages({
 fit_path <- 'models/model_fit.rds'
 prep_path <- 'models/model_inputs.rds'
 input_path <- 'data/fangraphs_batters_2018_2025.csv'
-results_dir <- 'results/plots/latent_fits'
+results_dir <- 'results/plots/latent_fits/batters'
 
 if (!dir.exists('results')) dir.create('results')
 if (!dir.exists(results_dir)) dir.create(results_dir)

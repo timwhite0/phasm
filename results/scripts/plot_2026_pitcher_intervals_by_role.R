@@ -9,7 +9,7 @@ suppressPackageStartupMessages({
 fit_path <- "models/pitcher_model_fit.rds"
 prep_path <- "models/pitcher_model_inputs.rds"
 atc_ip_path <- "data/atc_ip_projections_2026.csv"
-results_dir <- "results/plots/position_intervals"
+results_dir <- "results/plots/position_intervals/pitchers"
 
 if (!dir.exists("results")) dir.create("results")
 if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)
@@ -55,11 +55,16 @@ n_iter <- dim(eta_pred)[1]
 
 rate_pred <- exp(eta_pred[, keep_idx, , drop = FALSE])
 
+ip_mat <- matrix(rep(proj$IP_atc, each = n_iter), nrow = n_iter)
+
 metric_draws <- list(
   ERA = rate_pred[, , 4] * 9,
   K9 = rate_pred[, , 1] * 9,
+  BB9 = rate_pred[, , 2] * 9,
   WHIP = rate_pred[, , 2] + rate_pred[, , 3],
-  Ks = rate_pred[, , 1] * matrix(rep(proj$IP_atc, each = n_iter), nrow = n_iter)
+  Ks = rate_pred[, , 1] * ip_mat,
+  W = rate_pred[, , 5] * ip_mat,
+  QS = rate_pred[, , 6] * ip_mat
 )
 
 summarize_draws <- function(x) {
@@ -85,7 +90,7 @@ for (metric in names(metric_draws)) {
   proj_metrics <- bind_cols(proj_metrics, cols)
 }
 
-metrics <- c("ERA", "K9", "WHIP", "Ks")
+metrics <- c("ERA", "WHIP", "K9", "BB9", "Ks", "W", "QS")
 
 plot_role <- function(role_name) {
   role_df <- proj_metrics %>%
@@ -103,13 +108,13 @@ plot_role <- function(role_name) {
       rename(mean = all_of(mean_col), p05 = all_of(p05_col), p95 = all_of(p95_col)) %>%
       mutate(metric = metric)
 
-    metric_df <- if (metric %in% c("ERA", "WHIP")) {
+    metric_df <- if (metric %in% c("ERA", "WHIP", "BB9")) {
       metric_df %>% arrange(mean) %>% slice(1:30)
     } else {
       metric_df %>% arrange(desc(mean)) %>% slice(1:30)
     }
 
-    desc_flag <- metric %in% c("ERA", "WHIP")
+    desc_flag <- metric %in% c("ERA", "WHIP", "BB9")
     metric_df <- metric_df %>%
       mutate(
         PlayerName_plot = paste(PlayerName, metric, sep = "___"),

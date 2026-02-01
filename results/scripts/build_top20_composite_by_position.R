@@ -4,8 +4,8 @@ suppressPackageStartupMessages({
   library(stringr)
 })
 
-input_path <- "results/projections/composite_projections_2026.csv"
-output_path <- "results/projections/top20_composite_by_position.md"
+input_path <- "results/projections/batters/composite_projections_2026.csv"
+output_path <- "results/projections/batters/top20_composite_by_position.md"
 
 comp <- read_csv(input_path, show_col_types = FALSE) %>%
   mutate(
@@ -62,7 +62,7 @@ lines <- c(
   "# Top 20 Composite Z-Scores by Position (2026)",
   "",
   "## Methodology",
-  "- Composite scores come from `results/projections/composite_projections_2026.csv`.",
+  "- Composite scores come from `results/projections/batters/composite_projections_2026.csv`.",
   "- The composite is an equal-weight average of z-scores for: HR, R, RBI, SB totals (using ATC PA), plus OBP and SLG rates.",
   "- Z-scores are computed from **posterior means** of each category.",
   "- Positions use the primary position string; for multi-position players, the first position is used.",

@@ -3,9 +3,9 @@ suppressPackageStartupMessages({
   library(readr)
 })
 
-proj_path <- "results/projections/pitcher_category_projections_2026.csv"
+proj_path <- "results/projections/pitchers/pitcher_category_projections_2026.csv"
 atc_ip_path <- "data/atc_ip_projections_2026.csv"
-out_path <- "results/projections/pitcher_composite_projections_2026.csv"
+out_path <- "results/projections/pitchers/pitcher_composite_projections_2026.csv"
 
 proj <- read_csv(proj_path, show_col_types = FALSE) %>%
   mutate(playerid = as.character(playerid))
@@ -40,7 +40,8 @@ proj <- proj %>%
     ERA = ER_mean * 9,
     K9 = SO_mean * 9,
     WHIP = BB_mean + H_mean,
-    Ks = SO_mean * IP_atc
+    Ks = SO_mean * IP_atc,
+    WQS = W_mean + QS_mean
   )
 
 zscore <- function(x) (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
@@ -51,15 +52,16 @@ proj <- proj %>%
     z_K9 = zscore(K9),
     z_WHIP = -zscore(WHIP),
     z_IP = zscore(IP_atc),
-    composite = (z_ERA + z_K9 + z_WHIP + z_IP) / 4
+    z_WQS = zscore(WQS),
+    composite = (z_ERA + z_K9 + z_WHIP + z_IP + z_WQS) / 5
   )
 
 write_csv(
   proj %>%
     select(
       playerid, PlayerName, role,
-      ERA, K9, WHIP, Ks, IP_atc,
-      z_ERA, z_K9, z_WHIP, z_IP, composite
+      ERA, K9, WHIP, Ks, WQS, IP_atc,
+      z_ERA, z_K9, z_WHIP, z_IP, z_WQS, composite
     ),
   out_path
 )

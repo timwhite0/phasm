@@ -8,7 +8,7 @@ projections when paired with external PA/IP forecasts.
 
 ## What this does
 - Fits a joint multivariate Bayesian model (rstan) for H, R, RBI, HR, SB (per-PA rates) plus AVG, OBP, SLG.
-- Fits a joint multivariate Bayesian model (rstan) for SO, BB, H, ER (per-IP rates).
+- Fits a joint multivariate Bayesian model (rstan) for SO, BB, H, ER, W, QS (per-IP rates).
 - Uses age/aging curve and position (hitters); the current pitcher model is SP-only.
 - Player random intercepts and age slopes; position random intercepts and age/age^2 slopes.
 - Year random intercepts with AR(1) evolution.
@@ -23,11 +23,11 @@ projections when paired with external PA/IP forecasts.
 - Hitter outputs (after fitting):
   - `models/model_fit.rds`
   - `models/model_inputs.rds`
-  - `results/projections/category_projections_2026.csv`
+  - `results/projections/batters/category_projections_2026.csv`
 - Pitcher outputs (after fitting):
   - `models/pitcher_model_fit.rds`
   - `models/pitcher_model_inputs.rds`
-  - `results/projections/pitcher_category_projections_2026.csv`
+  - `results/projections/pitchers/pitcher_category_projections_2026.csv`
 
 ## Covariates used
 - Age (standardized) and age^2
@@ -66,7 +66,7 @@ Rscript models/fit_model.R
 Outputs:
 - `models/model_fit.rds`
 - `models/model_inputs.rds`
-- `results/projections/category_projections_2026.csv`
+- `results/projections/batters/category_projections_2026.csv`
 
 ### 3) Composite projections (optional)
 ```sh
@@ -74,7 +74,7 @@ Rscript results/scripts/build_composite_projections.R
 ```
 
 Outputs:
-- `results/projections/composite_projections_2026.csv`
+- `results/projections/batters/composite_projections_2026.csv`
 
 ### 4) Top 20 composites by position (optional)
 ```sh
@@ -82,7 +82,7 @@ Rscript results/scripts/build_top20_composite_by_position.R
 ```
 
 Outputs:
-- `results/projections/top20_composite_by_position.md`
+- `results/projections/batters/top20_composite_by_position.md`
 
 ### 5) Hitter latent fit plots (optional)
 ```sh
@@ -90,7 +90,7 @@ Rscript results/scripts/plot_latent_fit_top100_by_category.R
 ```
 
 Outputs:
-- `results/plots/latent_fits/latent_fit_top100_<CATEGORY>.pdf`
+- `results/plots/latent_fits/batters/latent_fit_top100_<CATEGORY>.pdf`
 
 ### 6) Generate the pitcher dataset
 ```sh
@@ -111,7 +111,7 @@ Rscript models/fit_pitcher_model.R
 Outputs:
 - `models/pitcher_model_fit.rds`
 - `models/pitcher_model_inputs.rds`
-- `results/projections/pitcher_category_projections_2026.csv`
+- `results/projections/pitchers/pitcher_category_projections_2026.csv`
 
 ### 8) Pitcher latent fit plots (optional)
 ```sh
@@ -119,7 +119,7 @@ Rscript results/scripts/plot_latent_fit_top100_by_pitcher_category.R
 ```
 
 Outputs:
-- `results/plots/latent_fits/pitcher_latent_fit_top100_<CATEGORY>.pdf`
+- `results/plots/latent_fits/pitchers/pitcher_latent_fit_top100_<CATEGORY>.pdf`
 
 ### 8b) Pitcher derived latent fits (optional)
 ```sh
@@ -127,7 +127,7 @@ Rscript results/scripts/plot_latent_fit_top100_pitcher_derived.R
 ```
 
 Outputs:
-- `results/plots/latent_fits/pitcher_latent_fit_derived_<METRIC>.pdf`
+- `results/plots/latent_fits/pitchers/pitcher_latent_fit_derived_<METRIC>.pdf`
 
 ### 9) 2026 interval projections by position (optional)
 ```sh
@@ -135,7 +135,7 @@ Rscript results/scripts/plot_2026_intervals_by_position.R
 ```
 
 Outputs:
-- `results/plots/position_intervals/projection_intervals_2026_<POSITION>.pdf`
+- `results/plots/position_intervals/batters/projection_intervals_2026_<POSITION>.pdf`
 
 ### 10) Pitcher 2026 interval projections by role (optional)
 ```sh
@@ -143,7 +143,7 @@ Rscript results/scripts/plot_2026_pitcher_intervals_by_role.R
 ```
 
 Outputs:
-- `results/plots/position_intervals/pitcher_intervals_2026_<ROLE>.pdf`
+- `results/plots/position_intervals/pitchers/pitcher_intervals_2026_<ROLE>.pdf`
 
 ### 11) Pitcher composite projections (optional)
 ```sh
@@ -151,7 +151,7 @@ Rscript results/scripts/build_pitcher_composite_projections.R
 ```
 
 Outputs:
-- `results/projections/pitcher_composite_projections_2026.csv`
+- `results/projections/pitchers/pitcher_composite_projections_2026.csv`
 
 ### 12) Top 50 pitcher composite by role (optional)
 ```sh
@@ -159,12 +159,12 @@ Rscript results/scripts/build_top50_pitcher_composite_by_role.R
 ```
 
 Outputs:
-- `results/projections/top50_pitcher_composite_by_role.md`
+- `results/projections/pitchers/top50_pitcher_composite_by_role.md`
 
 ## Pitcher model notes
-- Current pitcher model is SP-only (2018–2025) and models SO, BB, H, ER as per-IP rates.
+- Current pitcher model is SP-only (2018–2025) and models SO, BB, H, ER, W, and QS as per-IP rates.
 - Pitcher outcomes are modeled as Poisson with a log(IP) offset.
-- Role effects and SV/HLD/QS/W are omitted in the current SP-only run.
+- Role effects and SV/HLD are omitted in the current SP-only run.
 
 ## Model specification
 The sections below describe the hitter model. The current pitcher model uses the same backbone but

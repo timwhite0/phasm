@@ -14,7 +14,7 @@ message(sprintf("detectCores=%d, mc.cores=%d", cores, getOption("mc.cores")))
 # Config
 input_path <- "data/fangraphs_pitchers_2018_2025.csv"
 stan_path <- "models/pitcher_model.stan"
-output_projection_path <- "results/projections/pitcher_category_projections_2026.csv"
+output_projection_path <- "results/projections/pitchers/pitcher_category_projections_2026.csv"
 output_fit_path <- "models/pitcher_model_fit.rds"
 output_prep_path <- "models/pitcher_model_inputs.rds"
 
@@ -27,7 +27,7 @@ refresh <- as.integer(Sys.getenv("STAN_REFRESH", "100"))
 subset_players <- as.integer(Sys.getenv("STAN_SUBSET_PLAYERS", "0"))
 
 # Outcomes per IP
-count_outcomes <- c("SO", "BB", "H", "ER")
+count_outcomes <- c("SO", "BB", "H", "ER", "W", "QS")
 zip_outcomes <- character(0)
 
 # Load data
