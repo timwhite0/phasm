@@ -8,6 +8,8 @@ data {
   matrix[N, P] X;
   matrix[N, R_player] Z_player;
   int<lower=1, upper=K_count> zip_idx[K_zip];
+  int<lower=1, upper=K> k_svhld;
+  vector[N] role_leverage;
   matrix[P, K] beta_mean;
   matrix[P, K] beta_sd;
   vector<lower=0>[K] sigma_player_sd;
@@ -29,11 +31,13 @@ data {
   int<lower=1, upper=J_player> player_id_pred[N_pred];
   int<lower=1, upper=J_year + 1> year_id_pred[N_pred];
   vector[N_pred] offset_log_ip_pred;
+  vector[N_pred] role_leverage_pred;
 }
 
 parameters {
   matrix[P, K] beta;
   matrix[P, K_zip] beta_zip;
+  real beta_role_svhld;
 
   // Random effects: player (intercept, age)
   matrix[J_player, K] z_player[R_player];
@@ -73,6 +77,7 @@ model {
 
   rho_year ~ normal(0, 0.5);
   sigma_year ~ normal(0, sigma_year_sd);
+  beta_role_svhld ~ normal(0, 1);
 
   // AR(1) year effects
   for (k in 1:K) {
@@ -92,6 +97,7 @@ model {
     }
 
     eta += year_effect[, year_id[n]];
+    eta[k_svhld] += role_leverage[n] * beta_role_svhld;
 
     for (k in 1:K_count) {
       int handled;
@@ -140,6 +146,7 @@ generated quantities {
     } else {
       eta += year_effect_2026;
     }
+    eta[k_svhld] += role_leverage_pred[n] * beta_role_svhld;
 
     eta_pred[n] = eta';
   }

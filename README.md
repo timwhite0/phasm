@@ -227,6 +227,9 @@ Outputs:
 - RP model uses 2018–2025 relievers only and models SO, BB, H, ER, W, and SVHLD as per-IP rates.
 - RP outcomes are modeled as Poisson with a log(IP) offset.
 - RP fit input excludes any pitcher with ATC-projected GS >= 1 (from `data/atc_ip_projections_2026.csv`).
+- RP uses a binary `role_leverage` covariate for SVHLD only:
+  - Training years: top 3 in SVHLD on each team-season are flagged. For `Team == "2 Tms"`, top 5 are flagged; `3+ Tms` are excluded. Anyone with SVHLD >= 10 or SVHLD/IP >= 0.3 is also flagged.
+  - 2026: players listed as Closer/Co-Closer/Closer Committee/Setup Man on the Fangraphs closer depth chart are flagged and cached to `data/closer_depth_chart_2026.csv`.
 
 ## Model specification
 The sections below describe the hitter model. The current pitcher model uses the same backbone but

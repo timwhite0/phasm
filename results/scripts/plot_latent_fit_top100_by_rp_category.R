@@ -29,6 +29,9 @@ raw <- read_csv(input_path, show_col_types = FALSE) %>%
   filter(Season >= 2018, Season <= 2025) %>%
   filter(Role == "RP") %>%
   mutate(SVHLD = SV + HLD)
+if (!"role_leverage" %in% names(raw)) {
+  stop("role_leverage column missing from input data")
+}
 
 age_mean <- mean(raw$Age, na.rm = TRUE)
 age_sd <- sd(raw$Age, na.rm = TRUE)
@@ -44,12 +47,14 @@ years <- prep$years
 post <- rstan::extract(fit)
 eta_pred <- post$eta_pred
 beta <- post$beta
+beta_role_svhld <- post$beta_role_svhld
 beta_zip <- NULL
 u_role <- NULL
 u_player <- post$u_player
 year_effect <- post$year_effect
 n_iter <- dim(beta)[1]
 K <- dim(beta)[3]
+k_svhld <- 6
 
 summarize_draws <- function(x) {
   c(
@@ -120,6 +125,7 @@ for (o in outcomes) {
 
   player_id <- subset$player_id
   year_id <- subset$year_id
+  role_leverage <- subset$role_leverage
 
   n_rows <- nrow(subset)
   summaries <- vector('list', n_rows)
@@ -149,6 +155,7 @@ for (o in outcomes) {
     for (k in 1:K) {
       eta[, k] <- eta[, k] + year_effect[, k, yid]
     }
+    eta[, k_svhld] <- eta[, k_svhld] + role_leverage[i] * beta_role_svhld
 
     rate_count <- exp(eta)
 

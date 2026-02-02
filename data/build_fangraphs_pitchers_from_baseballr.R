@@ -108,6 +108,22 @@ fg <- fg %>%
     )
   )
 
+fg <- fg %>%
+  mutate(SVHLD = SV + HLD) %>%
+  group_by(Season, Team) %>%
+  mutate(
+    svhld_team_total = sum(SVHLD, na.rm = TRUE),
+    svhld_rank = ifelse(svhld_team_total > 0, dense_rank(desc(SVHLD)), Inf),
+    role_leverage = dplyr::case_when(
+      grepl("^[3-9] Tms$", Team) ~ 0,
+      Team == "2 Tms" ~ ifelse(svhld_team_total > 0 & svhld_rank <= 5, 1, 0),
+      TRUE ~ ifelse(svhld_team_total > 0 & svhld_rank <= 3, 1, 0)
+    ),
+    role_leverage = ifelse(SVHLD >= 10, 1, role_leverage),
+    role_leverage = ifelse(!is.na(IP) & IP > 0 & (SVHLD / IP) >= 0.3, 1, role_leverage)
+  ) %>%
+  ungroup()
+
 # Keep seasons with IP >= 20
 fg <- fg %>% filter(IP >= 20)
 
@@ -129,7 +145,7 @@ fg <- fg %>% filter(playerid %in% keep_recent)
 
 out <- fg %>% select(
   Season, PlayerName, playerid, Age, Role, Team, IP, G, GS,
-  SO, BB, H, ER, SV, HLD, W, QS
+  SO, BB, H, ER, SV, HLD, SVHLD, role_leverage, W, QS
 )
 
 write_csv(out, output_path)

@@ -4,6 +4,7 @@ suppressPackageStartupMessages({
   library(tidyr)
   library(purrr)
   library(rstan)
+  library(rvest)
 })
 
 rstan_options(auto_write = TRUE)
@@ -14,6 +15,8 @@ message(sprintf("detectCores=%d, mc.cores=%d", cores, getOption("mc.cores")))
 # Config
 input_path <- "data/fangraphs_pitchers_2018_2025.csv"
 atc_ip_path <- "data/atc_ip_projections_2026.csv"
+closer_depth_chart_url <- "https://www.fangraphs.com/roster-resource/closer-depth-chart"
+closer_cache_path <- "data/closer_depth_chart_2026.csv"
 stan_path <- "models/rp_model.stan"
 output_projection_path <- "results/projections/pitchers/rp_category_projections_2026.csv"
 output_fit_path <- "models/rp_model_fit.rds"
@@ -70,6 +73,70 @@ if (length(starter_ids) > 0) {
   raw <- raw %>% filter(!playerid %in% starter_ids)
 }
 
+normalize_name <- function(x) {
+  x2 <- iconv(x, from = "UTF-8", to = "ASCII//TRANSLIT")
+  tolower(gsub("[^a-z0-9]", "", x2))
+}
+
+fetch_closer_depth_chart <- function(url) {
+  doc <- read_html(url)
+  tables <- html_table(doc, fill = TRUE)
+  out <- vector("list", length(tables))
+  for (i in seq_along(tables)) {
+    tbl <- tables[[i]]
+    names(tbl) <- tolower(gsub("\\s+", "_", names(tbl)))
+    if (!all(c("team", "player", "projected_role") %in% names(tbl))) {
+      out[[i]] <- NULL
+      next
+    }
+    out[[i]] <- tbl %>%
+      transmute(
+        Team = .data$team,
+        PlayerName = .data$player,
+        ProjectedRole = .data$projected_role
+      )
+  }
+  bind_rows(out) %>%
+    filter(!is.na(PlayerName), PlayerName != "PLAYER") %>%
+    mutate(
+      PlayerName = trimws(PlayerName),
+      ProjectedRole = trimws(ProjectedRole)
+    )
+}
+
+closer_roles <- c("Closer", "Co-Closer", "Closer Committee", "Setup Man")
+if (file.exists(closer_cache_path)) {
+  closer_list <- read_csv(closer_cache_path, show_col_types = FALSE) %>%
+    rename_with(~ gsub("\\.", "_", .x))
+  # Normalize expected columns from the Fangraphs table export
+  if ("PROJECTED_ROLE" %in% names(closer_list)) {
+    closer_list <- closer_list %>% rename(ProjectedRole = PROJECTED_ROLE)
+  }
+  if ("PLAYER" %in% names(closer_list)) {
+    closer_list <- closer_list %>% rename(PlayerName = PLAYER)
+  }
+  if ("TEAM" %in% names(closer_list)) {
+    closer_list <- closer_list %>% rename(Team = TEAM)
+  }
+  # Drop division headers and duplicates
+  if (all(c("Team", "PlayerName", "ProjectedRole") %in% names(closer_list))) {
+    closer_list <- closer_list %>%
+      filter(!is.na(PlayerName), PlayerName != "", PlayerName != "PLAYER") %>%
+      filter(!(Team %in% c("AL East", "AL Central", "AL West", "NL East", "NL Central", "NL West"))) %>%
+      distinct(Team, PlayerName, ProjectedRole, .keep_all = TRUE)
+  }
+} else {
+  stop(paste0(
+    "Missing cached closer list at ", closer_cache_path,
+    ". Create it locally (online) and rerun."
+  ))
+}
+
+closer_list <- closer_list %>%
+  filter(ProjectedRole %in% closer_roles) %>%
+  mutate(name_key = normalize_name(PlayerName)) %>%
+  distinct(name_key)
+
 # Optional subset for faster testing
 if (!is.na(subset_players) && subset_players > 0) {
   set.seed(seed)
@@ -77,6 +144,7 @@ if (!is.na(subset_players) && subset_players > 0) {
   keep_ids <- sample(all_ids, size = min(subset_players, length(all_ids)), replace = FALSE)
   raw <- raw %>% filter(playerid %in% keep_ids)
 }
+
 
 # Age features (centered)
 age_mean <- mean(raw$Age, na.rm = TRUE)
@@ -152,6 +220,13 @@ latest_by_player <- latest_by_player %>%
     role_raw = if_else(is.na(Role) | Role == "", "UNK", Role)
   )
 
+latest_by_player <- latest_by_player %>%
+  mutate(
+    name_key = normalize_name(PlayerName),
+    role_leverage = ifelse(name_key %in% closer_list$name_key, 1, 0)
+  ) %>%
+  select(-name_key)
+
 X_pred <- cbind(
   intercept = 1,
   age_c = latest_by_player$age_c,
@@ -182,6 +257,8 @@ stan_data <- list(
   Z_player = Z_player,
   K_zip = length(zip_outcomes),
   zip_idx = match(zip_outcomes, count_outcomes),
+  k_svhld = match("SVHLD", count_outcomes),
+  role_leverage = as.numeric(raw$role_leverage),
   beta_mean = beta_mean,
   beta_sd = beta_sd,
   sigma_player_sd = sigma_player_sd,
@@ -198,7 +275,8 @@ stan_data <- list(
   Z_player_pred = Z_player_pred,
   player_id_pred = player_id_pred,
   year_id_pred = year_id_pred,
-  offset_log_ip_pred = offset_log_ip_pred
+  offset_log_ip_pred = offset_log_ip_pred,
+  role_leverage_pred = as.numeric(latest_by_player$role_leverage)
 )
 
 saveRDS(
