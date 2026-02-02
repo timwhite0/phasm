@@ -110,7 +110,7 @@ That script:
 - Keeps pitchers with `>= 20 IP` in either 2024 or 2025
 - Writes `data/fangraphs_pitchers_2018_2025.csv`
 
-### 7) Fit the pitcher model (Stan)
+### 7) Fit the SP model (Stan)
 ```sh
 Rscript models/fit_pitcher_model.R
 ```
@@ -218,14 +218,15 @@ Rscript results/scripts/build_top50_pitcher_composite_by_role.R
 Outputs:
 - `results/projections/pitchers/top50_pitcher_composite_by_role.md`
 
-## Pitcher model notes
-- Current pitcher model is SP-only (2018–2025) and models SO, BB, H, ER, W, and QS as per-IP rates.
-- Pitcher outcomes are modeled as Poisson with a log(IP) offset.
+## SP model notes
+- Current SP model is SP-only (2018–2025) and models SO, BB, H, ER, W, and QS as per-IP rates.
+- SP outcomes are modeled as Poisson with a log(IP) offset.
 - Role effects and SV/HLD are omitted in the current SP-only run.
 
 ## RP model notes
 - RP model uses 2018–2025 relievers only and models SO, BB, H, ER, W, and SVHLD as per-IP rates.
 - RP outcomes are modeled as Poisson with a log(IP) offset.
+- RP fit input excludes any pitcher with ATC-projected GS >= 1 (from `data/atc_ip_projections_2026.csv`).
 
 ## Model specification
 The sections below describe the hitter model. The current pitcher model uses the same backbone but
