@@ -10,7 +10,7 @@ projections when paired with external PA/IP forecasts.
 - Fits a joint multivariate Bayesian model (rstan) for H, R, RBI, HR, SB (per-PA rates) plus AVG, OBP, SLG.
 - Fits a joint multivariate Bayesian model (rstan) for SP: SO, BB, H, ER, W, QS (per-IP rates).
 - Fits a joint multivariate Bayesian model (rstan) for RP: SO, BB, H, ER, W, SVHLD (per-IP rates).
-- Uses age/aging curve and position (hitters); the current pitcher model is SP-only.
+- Uses age/aging curve for hitters and pitchers; position effects for hitters; role leverage for RP SVHLD.
 - Player random intercepts and age slopes; position random intercepts and age/age^2 slopes.
 - Year random intercepts with AR(1) evolution.
 
@@ -38,185 +38,8 @@ projections when paired with external PA/IP forecasts.
 
 ## Covariates used
 - Age (standardized) and age^2
-- SP-only pitcher model (no role random effects)
-
-## Notes
-- 2026 covariates are taken from the most recent season per player (age advanced by +1).
-- Count outcomes are modeled as Poisson with a log(PA) offset; projections are per-PA rates.
-- Pitcher count outcomes are modeled as Poisson with a log(IP) offset; projections are per-IP rates.
-- AVG/OBP use a logit transform; SLG uses log(SLG + 1e-4).
-- Handedness and Statcast covariates are excluded by design.
-- Seasons with PA < 100 are excluded from the dataset before fitting.
-- Seasons with IP < 20 are excluded from the pitcher dataset before fitting.
-
----
-
-## Workflow
-
-### 1) Generate the hitter dataset
-This repo pulls FanGraphs data via `baseballr` and builds the model dataset:
-```sh
-Rscript data/build_fangraphs_batters_from_baseballr.R
-```
-
-That script:
-- Fetches 2018–2025 batting leaderboards from FanGraphs (requires internet)
-- Keeps seasons with `PA >= 100`
-- Keeps players with `>= 100 PA` in either 2024 or 2025
-- Writes `data/fangraphs_batters_2018_2025.csv`
-
-### 2) Fit the hitter model (Stan)
-```sh
-Rscript models/fit_model.R
-```
-
-Outputs:
-- `models/model_fit.rds`
-- `models/model_inputs.rds`
-- `results/projections/batters/category_projections_2026.csv`
-
-### 3) Composite projections (optional)
-```sh
-Rscript results/scripts/build_composite_projections.R
-```
-
-Outputs:
-- `results/projections/batters/composite_projections_2026.csv`
-
-### 4) Top 20 composites by position (optional)
-```sh
-Rscript results/scripts/build_top20_composite_by_position.R
-```
-
-Outputs:
-- `results/projections/batters/top20_composite_by_position.md`
-
-### 5) Hitter latent fit plots (optional)
-```sh
-Rscript results/scripts/plot_latent_fit_top100_by_category.R
-```
-
-Outputs:
-- `results/plots/fitted_outcome_curves/batters/latent_fit_top100_<CATEGORY>.pdf`
-
-### 6) Generate the pitcher dataset
-```sh
-Rscript data/build_fangraphs_pitchers_from_baseballr.R
-```
-
-That script:
-- Fetches 2018–2025 pitching leaderboards from FanGraphs (requires internet)
-- Keeps seasons with `IP >= 20`
-- Keeps pitchers with `>= 20 IP` in either 2024 or 2025
-- Writes `data/fangraphs_pitchers_2018_2025.csv`
-
-### 7) Fit the SP model (Stan)
-```sh
-Rscript models/fit_sp_model.R
-```
-
-Outputs:
-- `models/sp_model_fit.rds`
-- `models/sp_model_inputs.rds`
-- `results/projections/pitchers/sp_category_projections_2026.csv`
-
-### 7b) Fit the RP model (Stan)
-```sh
-Rscript models/fit_rp_model.R
-```
-
-Outputs:
-- `models/rp_model_fit.rds`
-- `models/rp_model_inputs.rds`
-- `results/projections/pitchers/rp_category_projections_2026.csv`
-
-### 8) SP latent fit plots (optional)
-```sh
-Rscript results/scripts/plot_latent_fit_top100_by_sp_category.R
-```
-
-Outputs:
-- `results/plots/fitted_outcome_curves/pitchers/starters/sp_latent_fit_top100_<CATEGORY>.pdf`
-
-### 8b) SP derived latent fits (optional)
-```sh
-Rscript results/scripts/plot_latent_fit_top100_sp_derived.R
-```
-
-Outputs:
-- `results/plots/fitted_outcome_curves/pitchers/starters/sp_latent_fit_derived_<METRIC>.pdf`
-
-### 8c) RP latent fit plots (optional)
-```sh
-Rscript results/scripts/plot_latent_fit_top100_by_rp_category.R
-```
-
-Outputs:
-- `results/plots/fitted_outcome_curves/pitchers/relievers/rp_latent_fit_top100_<CATEGORY>.pdf`
-
-### 8d) RP derived latent fits (optional)
-```sh
-Rscript results/scripts/plot_latent_fit_top100_rp_derived.R
-```
-
-Outputs:
-- `results/plots/fitted_outcome_curves/pitchers/relievers/rp_latent_fit_derived_<METRIC>.pdf`
-
-### 9) 2026 interval projections by position (optional)
-```sh
-Rscript results/scripts/plot_2026_intervals_by_position.R
-```
-
-Outputs:
-- `results/plots/interval_projections/batters/projection_intervals_2026_<POSITION>.pdf`
-
-### 10) SP 2026 interval projections by role (optional)
-```sh
-Rscript results/scripts/plot_2026_sp_intervals_by_role.R
-```
-
-Outputs:
-- `results/plots/interval_projections/pitchers/starters/sp_intervals_2026_<ROLE>.pdf`
-
-### 10b) RP 2026 interval projections by role (optional)
-```sh
-Rscript results/scripts/plot_2026_rp_intervals_by_role.R
-```
-
-Outputs:
-- `results/plots/interval_projections/pitchers/relievers/rp_intervals_2026_<ROLE>.pdf`
-
-### 11) Pitcher composite projections (optional)
-```sh
-Rscript results/scripts/build_sp_composite_projections.R
-```
-
-Outputs:
-- `results/projections/pitchers/sp_composite_projections_2026.csv`
-
-### 12) Top 50 SP composite by role (optional)
-```sh
-Rscript results/scripts/build_top50_pitchers_composite_by_role.R
-```
-
-Outputs:
-- `results/projections/pitchers/top50_pitchers_composite_by_role.md`
-
-### 13) RP composite projections (optional)
-```sh
-Rscript results/scripts/build_rp_composite_projections.R
-```
-
-Outputs:
-- `results/projections/pitchers/rp_composite_projections_2026.csv`
-
-### 14) Top 50 SP composite by role (SP + RP) (optional)
-```sh
-Rscript results/scripts/build_top50_pitchers_composite_by_role.R
-```
-
-Outputs:
-- `results/projections/pitchers/top50_pitchers_composite_by_role.md`
+- Hitter position indicators
+- RP `role_leverage` indicator for SVHLD (fixed effect)
 
 ## SP model notes
 - Current SP model is SP-only (2018–2025) and models SO, BB, H, ER, W, and QS as per-IP rates.
@@ -232,8 +55,15 @@ Outputs:
   - 2026: players listed as Closer/Co-Closer/Closer Committee/Setup Man on the Fangraphs closer depth chart are flagged and cached to `data/closer_depth_chart_2026.csv`.
 
 ## Model specification
-The sections below describe the hitter model. The current pitcher model uses the same backbone but
-is SP-only, uses IP instead of PA for the offset, and models SO, BB, H, and ER.
+The sections below describe the hitter model. The pitcher models use the same backbone but
+use IP instead of PA for the offset, and model:
+- SP: SO, BB, H, ER, W, QS
+- RP: SO, BB, H, ER, W, SVHLD (plus `role_leverage` for SVHLD)
+
+## Dashboard
+- Shiny app lives in `dashboard/app.R`.
+- Run from repo root:
+  - `Rscript -e "shiny::runApp('dashboard', port = 3838, launch.browser = TRUE)"`
 
 ### Notation
 - Players $i = 1..I$, positions $p = 1..P$, years $y = 1..Y$
@@ -325,7 +155,3 @@ $$
 - Correlations: $\Omega^{\text{group}}_r \sim \text{LKJ}(2)$
 - Year AR(1) parameters: $\rho_k \sim \mathcal{N}(0, 0.5)$, $\sigma_{\text{year},k} \sim \mathcal{N}^+(0, 1)$
 - Continuous outcome noise: $\sigma_k \sim \mathcal{N}^+(0, 1)$
-
-### Notes
-- Count outcomes are forecasted as rates per PA; totals require a separate PA model.
-- Seasons with PA < 100 are excluded from the dataset before fitting.
