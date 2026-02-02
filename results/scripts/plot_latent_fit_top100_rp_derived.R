@@ -4,11 +4,11 @@ suppressPackageStartupMessages({
   library(ggplot2)
 })
 
-fit_path <- "models/pitcher_model_fit.rds"
-prep_path <- "models/pitcher_model_inputs.rds"
+fit_path <- "models/rp_model_fit.rds"
+prep_path <- "models/rp_model_inputs.rds"
 input_path <- "data/fangraphs_pitchers_2018_2025.csv"
 atc_ip_path <- "data/atc_ip_projections_2026.csv"
-results_dir <- "results/plots/fitted_outcome_curves/pitchers/starters"
+results_dir <- "results/plots/fitted_outcome_curves/pitchers/relievers"
 
 if (!dir.exists("results")) dir.create("results")
 if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)
@@ -18,7 +18,7 @@ prep <- readRDS(prep_path)
 raw <- read_csv(input_path, show_col_types = FALSE) %>%
   mutate(Season = as.integer(Season)) %>%
   filter(Season >= 2018, Season <= 2025) %>%
-  filter(Role == "SP")
+  filter(Role == "RP")
 
 atc <- read_csv(atc_ip_path, show_col_types = FALSE)
 
@@ -47,11 +47,11 @@ raw <- raw %>%
   mutate(
     age_c = (Age - age_mean) / age_sd,
     age2 = age_c^2,
-    player_id = as.integer(factor(playerid, levels = sort(unique(playerid)))),
-    row_id = row_number()
-  )
-
-years <- sort(unique(raw$Season))
+    player_id = match(as.integer(playerid), prep$player_lookup$playerid),
+    year_id = match(Season, prep$years)
+  ) %>%
+  filter(!is.na(player_id), !is.na(year_id)) %>%
+  mutate(row_id = row_number())
 
 post <- rstan::extract(fit)
 beta <- post$beta
@@ -80,7 +80,7 @@ Z_player_obs <- cbind(
 )
 
 player_id <- raw$player_id
-year_id <- match(raw$Season, years)
+year_id <- raw$year_id
 
 eta_obs <- function(i) {
   x_i <- X_obs[i, ]
@@ -234,7 +234,7 @@ for (metric in metrics) {
   order_df <- order_df %>% distinct(PlayerName)
   plot_df$PlayerName <- factor(plot_df$PlayerName, levels = order_df$PlayerName)
 
-  write_csv(plot_df, file.path(results_dir, paste0("sp_latent_fit_derived_", metric, "_data.csv")))
+  write_csv(plot_df, file.path(results_dir, paste0("rp_latent_fit_derived_", metric, "_data.csv")))
 
   p <- ggplot(plot_df, aes(x = Season, group = PlayerName)) +
     geom_linerange(aes(ymin = fitted_p05, ymax = fitted_p95, color = type), linewidth = 0.6, alpha = 0.7, na.rm = TRUE) +
@@ -256,7 +256,7 @@ for (metric in metrics) {
       strip.text = element_text(face = "bold")
     )
 
-  ggsave(filename = file.path(results_dir, paste0("sp_latent_fit_derived_", metric, ".pdf")),
+  ggsave(filename = file.path(results_dir, paste0("rp_latent_fit_derived_", metric, ".pdf")),
          plot = p, width = 18, height = 12)
 }
 

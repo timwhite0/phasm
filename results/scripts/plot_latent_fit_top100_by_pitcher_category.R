@@ -7,10 +7,10 @@ suppressPackageStartupMessages({
 fit_path <- 'models/pitcher_model_fit.rds'
 prep_path <- 'models/pitcher_model_inputs.rds'
 input_path <- 'data/fangraphs_pitchers_2018_2025.csv'
-results_dir <- 'results/plots/latent_fits/pitchers'
+results_dir <- 'results/plots/fitted_outcome_curves/pitchers/starters'
 
 if (!dir.exists('results')) dir.create('results')
-if (!dir.exists(results_dir)) dir.create(results_dir)
+if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)
 
 prep <- readRDS(prep_path)
 
@@ -204,7 +204,7 @@ for (o in outcomes) {
   order_df <- order_df %>% distinct(PlayerName)
   plot_df$PlayerName <- factor(plot_df$PlayerName, levels = order_df$PlayerName)
 
-  write_csv(plot_df, file.path(results_dir, paste0('pitcher_latent_fit_top100_', o, '_data.csv')))
+  write_csv(plot_df, file.path(results_dir, paste0('sp_latent_fit_top100_', o, '_data.csv')))
 
   p <- ggplot(plot_df, aes(x = Season, group = PlayerName)) +
     geom_linerange(aes(ymin = fitted_p05, ymax = fitted_p95, color = type), linewidth = 0.6, alpha = 0.7, na.rm = TRUE) +
@@ -226,7 +226,7 @@ for (o in outcomes) {
       strip.text = element_text(face = 'bold')
     )
 
-  ggsave(filename = file.path(results_dir, paste0('pitcher_latent_fit_top100_', o, '.pdf')),
+  ggsave(filename = file.path(results_dir, paste0('sp_latent_fit_top100_', o, '.pdf')),
          plot = p, width = 18, height = 12)
 }
 

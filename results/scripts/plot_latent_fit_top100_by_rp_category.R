@@ -4,45 +4,59 @@ suppressPackageStartupMessages({
   library(ggplot2)
 })
 
-fit_path <- 'models/model_fit.rds'
-prep_path <- 'models/model_inputs.rds'
-input_path <- 'data/fangraphs_batters_2018_2025.csv'
-results_dir <- 'results/plots/fitted_outcome_curves/batters'
+fit_path <- 'models/rp_model_fit.rds'
+prep_path <- 'models/rp_model_inputs.rds'
+input_path <- 'data/fangraphs_pitchers_2018_2025.csv'
+results_dir <- 'results/plots/fitted_outcome_curves/pitchers/relievers'
 
 if (!dir.exists('results')) dir.create('results')
-if (!dir.exists(results_dir)) dir.create(results_dir)
+if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)
 
 prep <- readRDS(prep_path)
 
 cat_defs <- list(
+  SO = 'SO_mean',
+  BB = 'BB_mean',
   H = 'H_mean',
-  R = 'R_mean',
-  RBI = 'RBI_mean',
-  HR = 'HR_mean',
-  SB = 'SB_mean',
-  AVG = 'AVG_mean',
-  OBP = 'OBP_mean',
-  SLG = 'SLG_mean'
+  ER = 'ER_mean',
+  W = 'W_mean',
+  SVHLD = 'SVHLD_mean'
 )
 
 fit <- readRDS(fit_path)
+raw <- read_csv(input_path, show_col_types = FALSE) %>%
+  mutate(Season = as.integer(Season)) %>%
+  filter(Season >= 2018, Season <= 2025) %>%
+  filter(Role == "RP") %>%
+  mutate(SVHLD = SV + HLD)
+
+age_mean <- mean(raw$Age, na.rm = TRUE)
+age_sd <- sd(raw$Age, na.rm = TRUE)
+raw <- raw %>%
+  mutate(
+    age_c = (Age - age_mean) / age_sd,
+    age2 = age_c^2,
+    player_id = as.integer(factor(playerid))
+  )
+
+years <- prep$years
+
 post <- rstan::extract(fit)
 eta_pred <- post$eta_pred
+beta <- post$beta
+beta_zip <- NULL
+u_role <- NULL
+u_player <- post$u_player
+year_effect <- post$year_effect
+n_iter <- dim(beta)[1]
+K <- dim(beta)[3]
 
-# Build projection summaries from the posterior draws (90% intervals)
-inv_logit <- function(x) 1 / (1 + exp(-x))
-epsilon <- 1e-4
-rate_count <- exp(eta_pred[, , 1:5])
-avg_pred <- inv_logit(eta_pred[, , 6])
-obp_pred <- inv_logit(eta_pred[, , 7])
-slg_pred <- pmax(exp(eta_pred[, , 8]) - epsilon, 0)
-
-summarize_draws <- function(draws_mat) {
+summarize_draws <- function(x) {
   c(
-    mean = mean(draws_mat, na.rm = TRUE),
-    p05 = as.numeric(quantile(draws_mat, 0.05, na.rm = TRUE)),
-    p50 = as.numeric(quantile(draws_mat, 0.5, na.rm = TRUE)),
-    p95 = as.numeric(quantile(draws_mat, 0.95, na.rm = TRUE))
+    mean = mean(x, na.rm = TRUE),
+    p05 = as.numeric(quantile(x, 0.05, na.rm = TRUE)),
+    p50 = as.numeric(quantile(x, 0.5, na.rm = TRUE)),
+    p95 = as.numeric(quantile(x, 0.95, na.rm = TRUE))
   )
 }
 
@@ -54,16 +68,15 @@ proj <- prep$player_lookup %>%
   mutate(playerid = as.character(playerid)) %>%
   distinct()
 
+rate_pred <- exp(eta_pred)
 proj <- bind_cols(
   proj,
-  setNames(as.data.frame(summarize_matrix(rate_count[, , 1])), c("H_mean", "H_p05", "H_p50", "H_p95")),
-  setNames(as.data.frame(summarize_matrix(rate_count[, , 2])), c("R_mean", "R_p05", "R_p50", "R_p95")),
-  setNames(as.data.frame(summarize_matrix(rate_count[, , 3])), c("RBI_mean", "RBI_p05", "RBI_p50", "RBI_p95")),
-  setNames(as.data.frame(summarize_matrix(rate_count[, , 4])), c("HR_mean", "HR_p05", "HR_p50", "HR_p95")),
-  setNames(as.data.frame(summarize_matrix(rate_count[, , 5])), c("SB_mean", "SB_p05", "SB_p50", "SB_p95")),
-  setNames(as.data.frame(summarize_matrix(avg_pred)), c("AVG_mean", "AVG_p05", "AVG_p50", "AVG_p95")),
-  setNames(as.data.frame(summarize_matrix(obp_pred)), c("OBP_mean", "OBP_p05", "OBP_p50", "OBP_p95")),
-  setNames(as.data.frame(summarize_matrix(slg_pred)), c("SLG_mean", "SLG_p05", "SLG_p50", "SLG_p95"))
+  setNames(as.data.frame(summarize_matrix(rate_pred[, , 1])), c("SO_mean", "SO_p05", "SO_p50", "SO_p95")),
+  setNames(as.data.frame(summarize_matrix(rate_pred[, , 2])), c("BB_mean", "BB_p05", "BB_p50", "BB_p95")),
+  setNames(as.data.frame(summarize_matrix(rate_pred[, , 3])), c("H_mean", "H_p05", "H_p50", "H_p95")),
+  setNames(as.data.frame(summarize_matrix(rate_pred[, , 4])), c("ER_mean", "ER_p05", "ER_p50", "ER_p95")),
+  setNames(as.data.frame(summarize_matrix(rate_pred[, , 5])), c("W_mean", "W_p05", "W_p50", "W_p95")),
+  setNames(as.data.frame(summarize_matrix(rate_pred[, , 6])), c("SVHLD_mean", "SVHLD_p05", "SVHLD_p50", "SVHLD_p95"))
 )
 
 cat_top <- list()
@@ -72,35 +85,12 @@ for (cat in names(cat_defs)) {
   if (!col %in% names(proj)) next
   cat_top[[cat]] <- proj %>%
     filter(!is.na(.data[[col]])) %>%
-    arrange(desc(.data[[col]])) %>%
+    {if (cat %in% c("H", "BB", "ER")) arrange(., .data[[col]]) else arrange(., desc(.data[[col]]))} %>%
     slice(1:100) %>%
     pull(playerid)
 }
 
-raw <- read_csv(input_path, show_col_types = FALSE) %>%
-  mutate(Season = as.integer(Season))
-
-age_mean <- mean(raw$Age, na.rm = TRUE)
-age_sd <- sd(raw$Age, na.rm = TRUE)
-raw <- raw %>%
-  mutate(
-    age_c = (Age - age_mean) / age_sd,
-    age2 = age_c^2,
-    player_id = as.integer(factor(playerid)),
-    pos_raw = if_else(is.na(position) | position == "", "UNK", position),
-    pos_id = as.integer(factor(pos_raw))
-  )
-
-years <- sort(unique(raw$Season))
-
-beta <- post$beta
-u_pos <- post$u_pos
-u_player <- post$u_player
-year_effect <- post$year_effect
-n_iter <- dim(beta)[1]
-K <- dim(beta)[3]
-
-outcomes <- c('H','R','RBI','HR','SB','AVG','OBP','SLG')
+outcomes <- names(cat_defs)
 
 for (o in outcomes) {
   ids <- cat_top[[o]]
@@ -114,38 +104,41 @@ for (o in outcomes) {
     age_c = subset$age_c,
     age2 = subset$age2
   )
-  Z_pos <- cbind(
-    intercept = 1,
-    age_c = subset$age_c,
-    age2 = subset$age2
-  )
   Z_player <- cbind(
     intercept = 1,
     age_c = subset$age_c
   )
 
+  subset <- subset %>%
+    mutate(
+      player_id = match(as.integer(playerid), prep$player_lookup$playerid),
+      year_id = match(Season, years)
+    ) %>%
+    filter(!is.na(player_id), !is.na(year_id))
+
+  if (nrow(subset) == 0) next
+
   player_id <- subset$player_id
-  pos_id <- subset$pos_id
-  year_id <- match(subset$Season, years)
+  year_id <- subset$year_id
 
   n_rows <- nrow(subset)
   summaries <- vector('list', n_rows)
 
   for (i in seq_len(n_rows)) {
     x_i <- X[i, ]
-    zp_i <- Z_pos[i, ]
     zpl_i <- Z_player[i, ]
     pid <- player_id[i]
-    pos <- pos_id[i]
     yid <- year_id[i]
 
     eta <- matrix(0, nrow = n_iter, ncol = K)
     for (k in 1:K) {
       eta[, k] <- beta[, 1, k] * x_i[1] + beta[, 2, k] * x_i[2] + beta[, 3, k] * x_i[3]
     }
-    for (r in 1:3) {
-      for (k in 1:K) {
-        eta[, k] <- eta[, k] + zp_i[r] * u_pos[, r, pos, k]
+    if (!is.null(u_role)) {
+      for (r in 1:3) {
+        for (k in 1:K) {
+          eta[, k] <- eta[, k] + zr_i[r] * u_role[, r, role, k]
+        }
       }
     }
     for (r in 1:2) {
@@ -157,20 +150,15 @@ for (o in outcomes) {
       eta[, k] <- eta[, k] + year_effect[, k, yid]
     }
 
-    rate_count <- exp(eta[, 1:5])
-    avg_pred <- inv_logit(eta[, 6])
-    obp_pred <- inv_logit(eta[, 7])
-    slg_pred <- pmax(exp(eta[, 8]) - 1e-4, 0)
+    rate_count <- exp(eta)
 
     summaries[[i]] <- list(
-      H = summarize_draws(rate_count[,1]),
-      R = summarize_draws(rate_count[,2]),
-      RBI = summarize_draws(rate_count[,3]),
-      HR = summarize_draws(rate_count[,4]),
-      SB = summarize_draws(rate_count[,5]),
-      AVG = summarize_draws(avg_pred),
-      OBP = summarize_draws(obp_pred),
-      SLG = summarize_draws(slg_pred)
+      SO = summarize_draws(rate_count[, 1]),
+      BB = summarize_draws(rate_count[, 2]),
+      H = summarize_draws(rate_count[, 3]),
+      ER = summarize_draws(rate_count[, 4]),
+      W = summarize_draws(rate_count[, 5]),
+      SVHLD = summarize_draws(rate_count[, 6])
     )
   }
 
@@ -178,11 +166,7 @@ for (o in outcomes) {
   for (i in seq_len(n_rows)) {
     obs <- subset[i, ]
     sum_o <- summaries[[i]][[o]]
-    obs_val <- if (o %in% c('H','R','RBI','HR','SB')) {
-      obs[[o]] / obs$PA
-    } else {
-      obs[[o]]
-    }
+    obs_val <- obs[[o]] / obs$IP
 
     plot_rows[[length(plot_rows) + 1]] <- data.frame(
       playerid = as.character(obs$playerid),
@@ -221,12 +205,16 @@ for (o in outcomes) {
   }
 
   order_df <- plot_df %>%
-    filter(Season == 2026L) %>%
-    arrange(desc(fitted_mean)) %>%
-    distinct(PlayerName)
+    filter(Season == 2026L)
+  if (o %in% c("H", "BB", "ER")) {
+    order_df <- order_df %>% arrange(fitted_mean)
+  } else {
+    order_df <- order_df %>% arrange(desc(fitted_mean))
+  }
+  order_df <- order_df %>% distinct(PlayerName)
   plot_df$PlayerName <- factor(plot_df$PlayerName, levels = order_df$PlayerName)
 
-  write_csv(plot_df, file.path(results_dir, paste0('latent_fit_top100_', o, '_data.csv')))
+  write_csv(plot_df, file.path(results_dir, paste0('rp_latent_fit_top100_', o, '_data.csv')))
 
   p <- ggplot(plot_df, aes(x = Season, group = PlayerName)) +
     geom_linerange(aes(ymin = fitted_p05, ymax = fitted_p95, color = type), linewidth = 0.6, alpha = 0.7, na.rm = TRUE) +
@@ -236,11 +224,11 @@ for (o in outcomes) {
     geom_point(aes(y = observed), color = 'black', size = 1.4, na.rm = TRUE) +
     facet_wrap(~ PlayerName, scales = 'fixed') +
     theme_minimal(base_size = 10) +
-    scale_x_continuous(breaks = 2021:2026) +
+    scale_x_continuous(breaks = 2018:2026) +
     scale_color_manual(values = c(fit = 'goldenrod', projection = 'dodgerblue')) +
     labs(
-      title = paste0(o, ': observed (red), fitted (blue), 2026 proj (green)'),
-      y = if (o %in% c('H','R','RBI','HR','SB')) paste0(o, ' per PA') else o,
+      title = paste0(o, ' per IP: observed (black), fitted (goldenrod), 2026 proj (dodgerblue)'),
+      y = paste0(o, ' per IP'),
       x = 'Season'
     ) +
     theme(
@@ -248,7 +236,7 @@ for (o in outcomes) {
       strip.text = element_text(face = 'bold')
     )
 
-  ggsave(filename = file.path(results_dir, paste0('latent_fit_top100_', o, '.pdf')),
+  ggsave(filename = file.path(results_dir, paste0('rp_latent_fit_top100_', o, '.pdf')),
          plot = p, width = 18, height = 12)
 }
 

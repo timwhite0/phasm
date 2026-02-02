@@ -8,7 +8,7 @@ suppressPackageStartupMessages({
 
 proj_path <- "results/projections/batters/category_projections_2026.csv"
 pa_path <- "data/atc_pa_projections_2026.csv"
-results_dir <- "results/plots/position_intervals/batters"
+results_dir <- "results/plots/interval_projections/batters"
 
 if (!dir.exists("results")) dir.create("results")
 if (!dir.exists(results_dir)) dir.create(results_dir)

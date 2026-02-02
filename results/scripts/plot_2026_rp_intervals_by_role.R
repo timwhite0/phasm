@@ -6,10 +6,10 @@ suppressPackageStartupMessages({
   library(stringr)
 })
 
-fit_path <- "models/pitcher_model_fit.rds"
-prep_path <- "models/pitcher_model_inputs.rds"
+fit_path <- "models/rp_model_fit.rds"
+prep_path <- "models/rp_model_inputs.rds"
 atc_ip_path <- "data/atc_ip_projections_2026.csv"
-results_dir <- "results/plots/interval_projections/pitchers/starters"
+results_dir <- "results/plots/interval_projections/pitchers/relievers"
 
 if (!dir.exists("results")) dir.create("results")
 if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)
@@ -64,7 +64,7 @@ metric_draws <- list(
   WHIP = rate_pred[, , 2] + rate_pred[, , 3],
   Ks = rate_pred[, , 1] * ip_mat,
   W = rate_pred[, , 5] * ip_mat,
-  QS = rate_pred[, , 6] * ip_mat
+  SVHLD = rate_pred[, , 6] * ip_mat
 )
 
 summarize_draws <- function(x) {
@@ -90,7 +90,7 @@ for (metric in names(metric_draws)) {
   proj_metrics <- bind_cols(proj_metrics, cols)
 }
 
-metrics <- c("ERA", "WHIP", "K9", "BB9", "Ks", "W", "QS")
+metrics <- c("ERA", "WHIP", "K9", "BB9", "Ks", "W", "SVHLD")
 
 plot_role <- function(role_name) {
   role_df <- proj_metrics %>%
@@ -145,7 +145,7 @@ plot_role <- function(role_name) {
     )
 
   out_role <- str_replace_all(role_name, "[^A-Za-z0-9]+", "_")
-  out_path <- file.path(results_dir, paste0("sp_intervals_2026_", out_role, ".pdf"))
+  out_path <- file.path(results_dir, paste0("rp_intervals_2026_", out_role, ".pdf"))
   ggsave(out_path, plot = p, width = 12, height = 14)
 }
 

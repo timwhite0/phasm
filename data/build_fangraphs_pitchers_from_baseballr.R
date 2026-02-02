@@ -128,7 +128,7 @@ keep_recent <- fg %>%
 fg <- fg %>% filter(playerid %in% keep_recent)
 
 out <- fg %>% select(
-  Season, PlayerName, playerid, Age, Role, Team, IP,
+  Season, PlayerName, playerid, Age, Role, Team, IP, G, GS,
   SO, BB, H, ER, SV, HLD, W, QS
 )
 

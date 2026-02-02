@@ -4,9 +4,12 @@ suppressPackageStartupMessages({
 })
 
 input_path <- "results/projections/pitchers/pitcher_composite_projections_2026.csv"
+rp_input_path <- "results/projections/pitchers/rp_composite_projections_2026.csv"
 output_path <- "results/projections/pitchers/top50_pitcher_composite_by_role.md"
 
 comp <- read_csv(input_path, show_col_types = FALSE) %>%
+  mutate(role = ifelse(is.na(role) | role == "", "UNK", role))
+comp_rp <- read_csv(rp_input_path, show_col_types = FALSE) %>%
   mutate(role = ifelse(is.na(role) | role == "", "UNK", role))
 
 fmt <- function(x) ifelse(is.na(x), "NA", sprintf("%.3f", x))
@@ -47,7 +50,45 @@ make_table <- function(df, include_role = FALSE) {
   paste0(header, "\n", paste(rows, collapse = "\n"), "\n")
 }
 
+make_table_rp <- function(df, include_role = FALSE) {
+  df <- df %>%
+    mutate(
+      composite_z = fmt(composite),
+      z_ERA = fmt(z_ERA),
+      z_WHIP = fmt(z_WHIP),
+      z_IP = fmt(z_IP),
+      z_W = fmt(z_W),
+      z_Ks = fmt(z_Ks),
+      z_SVH = fmt(z_SVH)
+    )
+  if (include_role) {
+    header <- paste(
+      "| Rank | Player | Role | Composite z | z_ERA | z_WHIP | z_IP | z_W | z_Ks | z_SVH |",
+      "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|",
+      sep = "\n"
+    )
+    rows <- paste0(
+      "| ", seq_len(nrow(df)), " | ", df$PlayerName, " | ", df$role,
+      " | ", df$composite_z, " | ", df$z_ERA, " | ", df$z_WHIP,
+      " | ", df$z_IP, " | ", df$z_W, " | ", df$z_Ks, " | ", df$z_SVH, " |"
+    )
+  } else {
+    header <- paste(
+      "| Rank | Player | Composite z | z_ERA | z_WHIP | z_IP | z_W | z_Ks | z_SVH |",
+      "|---:|---|---:|---:|---:|---:|---:|---:|---:|",
+      sep = "\n"
+    )
+    rows <- paste0(
+      "| ", seq_len(nrow(df)), " | ", df$PlayerName,
+      " | ", df$composite_z, " | ", df$z_ERA, " | ", df$z_WHIP,
+      " | ", df$z_IP, " | ", df$z_W, " | ", df$z_Ks, " | ", df$z_SVH, " |"
+    )
+  }
+  paste0(header, "\n", paste(rows, collapse = "\n"), "\n")
+}
+
 roles <- sort(unique(comp$role))
+rp_roles <- sort(unique(comp_rp$role))
 
 lines <- c(
   "# Top 50 Pitcher Composite Z-Scores by Role (2026)",
@@ -67,6 +108,23 @@ for (role_name in roles) {
     arrange(desc(composite)) %>%
     slice_head(n = 50)
   lines <- c(lines, paste0("### ", role_name), "", make_table(df_role, include_role = FALSE), "")
+}
+
+lines <- c(
+  lines,
+  "## RP Top 50 by Role",
+  "",
+  "- Composite scores come from `results/projections/pitchers/rp_composite_projections_2026.csv`.",
+  "- The composite is an equal-weight average of z-scores for: ERA (sign flipped), WHIP (sign flipped), IP, W, Ks, and SVHLD.",
+  ""
+)
+
+for (role_name in rp_roles) {
+  df_role <- comp_rp %>%
+    filter(role == role_name) %>%
+    arrange(desc(composite)) %>%
+    slice_head(n = 50)
+  lines <- c(lines, paste0("### ", role_name), "", make_table_rp(df_role, include_role = FALSE), "")
 }
 
 writeLines(lines, output_path)
