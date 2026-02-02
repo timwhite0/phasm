@@ -17,8 +17,8 @@ projections when paired with external PA/IP forecasts.
 ## Files
 - Hitter Stan model: `models/model.stan`
 - Hitter R driver: `models/fit_model.R`
-- Pitcher Stan model: `models/pitcher_model.stan`
-- Pitcher R driver: `models/fit_pitcher_model.R`
+- SP Stan model: `models/sp_model.stan`
+- SP R driver: `models/fit_sp_model.R`
 - RP Stan model: `models/rp_model.stan`
 - RP R driver: `models/fit_rp_model.R`
 - Hitter inputs: `data/fangraphs_batters_2018_2025.csv`
@@ -27,10 +27,10 @@ projections when paired with external PA/IP forecasts.
   - `models/model_fit.rds`
   - `models/model_inputs.rds`
   - `results/projections/batters/category_projections_2026.csv`
-- Pitcher outputs (after fitting):
-  - `models/pitcher_model_fit.rds`
-  - `models/pitcher_model_inputs.rds`
-  - `results/projections/pitchers/pitcher_category_projections_2026.csv`
+- SP outputs (after fitting):
+  - `models/sp_model_fit.rds`
+  - `models/sp_model_inputs.rds`
+  - `results/projections/pitchers/sp_category_projections_2026.csv`
 - RP outputs (after fitting):
   - `models/rp_model_fit.rds`
   - `models/rp_model_inputs.rds`
@@ -112,13 +112,13 @@ That script:
 
 ### 7) Fit the SP model (Stan)
 ```sh
-Rscript models/fit_pitcher_model.R
+Rscript models/fit_sp_model.R
 ```
 
 Outputs:
-- `models/pitcher_model_fit.rds`
-- `models/pitcher_model_inputs.rds`
-- `results/projections/pitchers/pitcher_category_projections_2026.csv`
+- `models/sp_model_fit.rds`
+- `models/sp_model_inputs.rds`
+- `results/projections/pitchers/sp_category_projections_2026.csv`
 
 ### 7b) Fit the RP model (Stan)
 ```sh
@@ -132,7 +132,7 @@ Outputs:
 
 ### 8) SP latent fit plots (optional)
 ```sh
-Rscript results/scripts/plot_latent_fit_top100_by_pitcher_category.R
+Rscript results/scripts/plot_latent_fit_top100_by_sp_category.R
 ```
 
 Outputs:
@@ -140,7 +140,7 @@ Outputs:
 
 ### 8b) SP derived latent fits (optional)
 ```sh
-Rscript results/scripts/plot_latent_fit_top100_pitcher_derived.R
+Rscript results/scripts/plot_latent_fit_top100_sp_derived.R
 ```
 
 Outputs:
@@ -172,7 +172,7 @@ Outputs:
 
 ### 10) SP 2026 interval projections by role (optional)
 ```sh
-Rscript results/scripts/plot_2026_pitcher_intervals_by_role.R
+Rscript results/scripts/plot_2026_sp_intervals_by_role.R
 ```
 
 Outputs:
@@ -188,19 +188,19 @@ Outputs:
 
 ### 11) Pitcher composite projections (optional)
 ```sh
-Rscript results/scripts/build_pitcher_composite_projections.R
+Rscript results/scripts/build_sp_composite_projections.R
 ```
 
 Outputs:
-- `results/projections/pitchers/pitcher_composite_projections_2026.csv`
+- `results/projections/pitchers/sp_composite_projections_2026.csv`
 
-### 12) Top 50 pitcher composite by role (optional)
+### 12) Top 50 SP composite by role (optional)
 ```sh
-Rscript results/scripts/build_top50_pitcher_composite_by_role.R
+Rscript results/scripts/build_top50_pitchers_composite_by_role.R
 ```
 
 Outputs:
-- `results/projections/pitchers/top50_pitcher_composite_by_role.md`
+- `results/projections/pitchers/top50_pitchers_composite_by_role.md`
 
 ### 13) RP composite projections (optional)
 ```sh
@@ -210,13 +210,13 @@ Rscript results/scripts/build_rp_composite_projections.R
 Outputs:
 - `results/projections/pitchers/rp_composite_projections_2026.csv`
 
-### 14) Top 50 pitcher composite by role (SP + RP) (optional)
+### 14) Top 50 SP composite by role (SP + RP) (optional)
 ```sh
-Rscript results/scripts/build_top50_pitcher_composite_by_role.R
+Rscript results/scripts/build_top50_pitchers_composite_by_role.R
 ```
 
 Outputs:
-- `results/projections/pitchers/top50_pitcher_composite_by_role.md`
+- `results/projections/pitchers/top50_pitchers_composite_by_role.md`
 
 ## SP model notes
 - Current SP model is SP-only (2018–2025) and models SO, BB, H, ER, W, and QS as per-IP rates.

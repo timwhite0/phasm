@@ -3,9 +3,9 @@ suppressPackageStartupMessages({
   library(readr)
 })
 
-proj_path <- "results/projections/pitchers/pitcher_category_projections_2026.csv"
+proj_path <- "results/projections/pitchers/sp_category_projections_2026.csv"
 atc_ip_path <- "data/atc_ip_projections_2026.csv"
-out_path <- "results/projections/pitchers/pitcher_composite_projections_2026.csv"
+out_path <- "results/projections/pitchers/sp_composite_projections_2026.csv"
 
 proj <- read_csv(proj_path, show_col_types = FALSE) %>%
   mutate(playerid = as.character(playerid))

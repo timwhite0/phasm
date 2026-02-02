@@ -3,9 +3,9 @@ suppressPackageStartupMessages({
   library(dplyr)
 })
 
-input_path <- "results/projections/pitchers/pitcher_composite_projections_2026.csv"
+input_path <- "results/projections/pitchers/sp_composite_projections_2026.csv"
 rp_input_path <- "results/projections/pitchers/rp_composite_projections_2026.csv"
-output_path <- "results/projections/pitchers/top50_pitcher_composite_by_role.md"
+output_path <- "results/projections/pitchers/top50_pitchers_composite_by_role.md"
 
 comp <- read_csv(input_path, show_col_types = FALSE) %>%
   mutate(role = ifelse(is.na(role) | role == "", "UNK", role))
@@ -94,7 +94,7 @@ lines <- c(
   "# Top 50 Pitcher Composite Z-Scores by Role (2026)",
   "",
   "## Methodology",
-  "- Composite scores come from `results/projections/pitchers/pitcher_composite_projections_2026.csv`.",
+  "- Composite scores come from `results/projections/pitchers/sp_composite_projections_2026.csv`.",
   "- The composite is an equal-weight average of z-scores for: ERA (sign flipped), K/9, WHIP (sign flipped), W+QS, and ATC-projected IP.",
   "- Z-scores are computed from **posterior means** of each metric.",
   "",

@@ -13,10 +13,10 @@ message(sprintf("detectCores=%d, mc.cores=%d", cores, getOption("mc.cores")))
 
 # Config
 input_path <- "data/fangraphs_pitchers_2018_2025.csv"
-stan_path <- "models/pitcher_model.stan"
-output_projection_path <- "results/projections/pitchers/pitcher_category_projections_2026.csv"
-output_fit_path <- "models/pitcher_model_fit.rds"
-output_prep_path <- "models/pitcher_model_inputs.rds"
+stan_path <- "models/sp_model.stan"
+output_projection_path <- "results/projections/pitchers/sp_category_projections_2026.csv"
+output_fit_path <- "models/sp_model_fit.rds"
+output_prep_path <- "models/sp_model_inputs.rds"
 
 run_fit <- TRUE
 chains <- as.integer(Sys.getenv("STAN_CHAINS", "4"))

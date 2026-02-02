@@ -1,7 +1,7 @@
 # Top 50 Pitcher Composite Z-Scores by Role (2026)
 
 ## Methodology
-- Composite scores come from `results/projections/pitchers/pitcher_composite_projections_2026.csv`.
+- Composite scores come from `results/projections/pitchers/sp_composite_projections_2026.csv`.
 - The composite is an equal-weight average of z-scores for: ERA (sign flipped), K/9, WHIP (sign flipped), W+QS, and ATC-projected IP.
 - Z-scores are computed from **posterior means** of each metric.
 

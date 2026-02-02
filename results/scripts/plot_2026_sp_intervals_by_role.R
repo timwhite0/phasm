@@ -6,8 +6,8 @@ suppressPackageStartupMessages({
   library(stringr)
 })
 
-fit_path <- "models/pitcher_model_fit.rds"
-prep_path <- "models/pitcher_model_inputs.rds"
+fit_path <- "models/sp_model_fit.rds"
+prep_path <- "models/sp_model_inputs.rds"
 atc_ip_path <- "data/atc_ip_projections_2026.csv"
 results_dir <- "results/plots/interval_projections/pitchers/starters"
 
