@@ -244,16 +244,17 @@ for (metric in metrics) {
     geom_point(aes(y = observed), color = "black", size = 1.4, na.rm = TRUE) +
     facet_wrap(~ PlayerName, scales = "fixed") +
     theme_minimal(base_size = 10) +
-    scale_x_continuous(breaks = 2021:2026) +
+    scale_x_continuous(breaks = 2018:2026) +
     scale_color_manual(values = c(fit = "goldenrod", projection = "dodgerblue")) +
     labs(
-      title = paste0(metric, ": observed (black), fitted (goldenrod), 2026 proj (dodgerblue)"),
+      title = paste0(metric, ": observed (black), fitted (gold), 2026 projection (blue)"),
       y = metric,
       x = "Season"
     ) +
     theme(
       legend.position = "none",
-      strip.text = element_text(face = "bold")
+      strip.text = element_text(face = "bold"),
+      axis.text.x = element_text(angle = 45, hjust = 1)
     )
 
   ggsave(filename = file.path(results_dir, paste0("rp_latent_fit_derived_", metric, ".pdf")),

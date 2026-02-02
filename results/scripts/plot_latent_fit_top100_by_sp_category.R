@@ -217,13 +217,14 @@ for (o in outcomes) {
     scale_x_continuous(breaks = 2018:2026) +
     scale_color_manual(values = c(fit = 'goldenrod', projection = 'dodgerblue')) +
     labs(
-      title = paste0(o, ' per IP: observed (black), fitted (goldenrod), 2026 proj (dodgerblue)'),
+      title = paste0(o, ' per IP: observed (black), fitted (gold), 2026 projection (blue)'),
       y = paste0(o, ' per IP'),
       x = 'Season'
     ) +
     theme(
       legend.position = 'none',
-      strip.text = element_text(face = 'bold')
+      strip.text = element_text(face = 'bold'),
+      axis.text.x = element_text(angle = 45, hjust = 1)
     )
 
   ggsave(filename = file.path(results_dir, paste0('sp_latent_fit_top100_', o, '.pdf')),

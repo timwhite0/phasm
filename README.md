@@ -1,6 +1,8 @@
 # PHASM
 ## Probabilistic hierarchical autoregressive sabermetric model
 
+Live dashboard: https://twhit.shinyapps.io/phasm/
+
 PHASM is a Bayesian projection system for MLB hitters and pitchers. It combines multivariate outcome
 modeling, hierarchical player/position effects, and AR(1) year trends to produce
 probabilistic forecasts of per-PA/per-IP rates and rate stats. The system also supports total-count
@@ -90,10 +92,7 @@ use IP instead of PA for the offset, and model:
 ### Linear predictors (for each outcome k)
 
 $$
-\eta_{n,k} = X_n \beta_k
-          + \sum_{r=1}^{R_{\text{pos}}} Z^{\text{pos}}_{n,r}\,u^{\text{pos}}_{p[n],k,r}
-          + \sum_{r=1}^{R_{\text{player}}} Z^{\text{player}}_{n,r}\,u^{\text{player}}_{i[n],k,r}
-          + \gamma_{k, y[n]}.
+\eta_{n,k} = X_n \beta_k + \sum_{r=1}^{R_{\text{pos}}} Z^{\text{pos}}_{n,r}\,u^{\text{pos}}_{p[n],k,r} + \sum_{r=1}^{R_{\text{player}}} Z^{\text{player}}_{n,r}\,u^{\text{player}}_{i[n],k,r} + \gamma_{k, y[n]}.
 $$
 
 ### Likelihood

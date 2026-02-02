@@ -236,16 +236,17 @@ for (o in outcomes) {
     geom_point(aes(y = observed), color = 'black', size = 1.4, na.rm = TRUE) +
     facet_wrap(~ PlayerName, scales = 'fixed') +
     theme_minimal(base_size = 10) +
-    scale_x_continuous(breaks = 2021:2026) +
+    scale_x_continuous(breaks = 2018:2026) +
     scale_color_manual(values = c(fit = 'goldenrod', projection = 'dodgerblue')) +
     labs(
-      title = paste0(o, ': observed (red), fitted (blue), 2026 proj (green)'),
+      title = paste0(o, ': observed (black), fitted (gold), 2026 projection (blue)'),
       y = if (o %in% c('H','R','RBI','HR','SB')) paste0(o, ' per PA') else o,
       x = 'Season'
     ) +
     theme(
       legend.position = 'none',
-      strip.text = element_text(face = 'bold')
+      strip.text = element_text(face = 'bold'),
+      axis.text.x = element_text(angle = 45, hjust = 1)
     )
 
   ggsave(filename = file.path(results_dir, paste0('latent_fit_top100_', o, '.pdf')),

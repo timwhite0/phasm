@@ -49,11 +49,11 @@ zscore <- function(x) (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
 proj <- proj %>%
   mutate(
     z_ERA = -zscore(ERA),
-    z_K9 = zscore(K9),
+    z_Ks = zscore(Ks),
     z_WHIP = -zscore(WHIP),
     z_IP = zscore(IP_atc),
     z_WQS = zscore(WQS),
-    composite = (z_ERA + z_K9 + z_WHIP + z_IP + z_WQS) / 5
+    composite = (z_ERA + z_Ks + z_WHIP + z_IP + z_WQS) / 5
   )
 
 write_csv(
@@ -61,7 +61,7 @@ write_csv(
     select(
       playerid, PlayerName, role,
       ERA, K9, WHIP, Ks, WQS, IP_atc,
-      z_ERA, z_K9, z_WHIP, z_IP, z_WQS, composite
+      z_ERA, z_Ks, z_WHIP, z_IP, z_WQS, composite
     ),
   out_path
 )

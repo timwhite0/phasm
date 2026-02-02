@@ -1,0 +1,10 @@
+name: phasm
+title:
+username: twhit
+account: twhit
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 16574709
+bundleId: 11528519
+url: https://twhit.shinyapps.io/phasm/
+version: 1
