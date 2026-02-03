@@ -7,7 +7,8 @@ PHASM is a Bayesian projection system for MLB hitters and pitchers. It combines 
 modeling, hierarchical player/position effects, and AR(1) year trends to produce
 probabilistic forecasts of per-PA/per-IP rates and rate stats. The system also supports total-count
 projections when paired with external PA/IP forecasts.
-Category projection outputs include posterior mean and quantiles (p05, p50, p95).
+Category projection outputs include posterior mean and quantiles (p05, p50, p95). Count outcomes are also
+stored as totals using ATC PA/IP (e.g., H_mean_t, Ks_mean, W_mean_t, SVHLD_mean_t).
 
 ## What this does
 - Fits a joint multivariate Bayesian model (rstan) for H, R, RBI, HR, SB (per-PA rates) plus AVG, OBP, SLG.
