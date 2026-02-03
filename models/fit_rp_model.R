@@ -301,21 +301,23 @@ if (run_fit) {
     refresh = refresh,
     control = list(adapt_delta = 0.9, max_treedepth = 12)
   )
-
   saveRDS(fit, output_fit_path)
+} else {
+  fit <- readRDS(output_fit_path)
+}
 
-  # Extract predictions
-  if (length(rstan::get_sampler_params(fit, inc_warmup = FALSE)) == 0) {
-    stop("Stan fit contains no samples; aborting projection step.")
-  }
+# Extract predictions
+if (length(rstan::get_sampler_params(fit, inc_warmup = FALSE)) == 0) {
+  stop("Stan fit contains no samples; aborting projection step.")
+}
 
-  eta_pred <- rstan::extract(fit, pars = "eta_pred")$eta_pred
-  beta_zip <- NULL
-  if (length(zip_outcomes) > 0) {
-    beta_zip <- rstan::extract(fit, pars = "beta_zip")$beta_zip
-  }
+eta_pred <- rstan::extract(fit, pars = "eta_pred")$eta_pred
+beta_zip <- NULL
+if (length(zip_outcomes) > 0) {
+  beta_zip <- rstan::extract(fit, pars = "beta_zip")$beta_zip
+}
 
-  # Summarize predictions per player
+# Summarize predictions per player
 rate_count <- exp(eta_pred)
 
 if (!is.null(beta_zip)) {
@@ -331,30 +333,28 @@ if (!is.null(beta_zip)) {
   }
 }
 
-
-  summarize_draws <- function(draws_mat) {
-    tibble(
-      mean = apply(draws_mat, 2, mean),
-      p10 = apply(draws_mat, 2, quantile, probs = 0.10),
-      p50 = apply(draws_mat, 2, quantile, probs = 0.50),
-      p90 = apply(draws_mat, 2, quantile, probs = 0.90)
-    )
-  }
-
-  proj <- latest_by_player %>%
-    transmute(
-      playerid,
-      PlayerName,
-      role = role_raw
-    ) %>%
-    distinct()
-
-  # Add outcomes
-  for (k in seq_along(count_outcomes)) {
-    summary_k <- summarize_draws(rate_count[, , k])
-    names(summary_k) <- paste0(count_outcomes[k], "_", names(summary_k))
-    proj <- bind_cols(proj, summary_k)
-  }
-
-  write_csv(proj, output_projection_path)
+summarize_draws <- function(draws_mat) {
+  tibble(
+    mean = apply(draws_mat, 2, mean),
+    p05 = apply(draws_mat, 2, quantile, probs = 0.05),
+    p50 = apply(draws_mat, 2, quantile, probs = 0.50),
+    p95 = apply(draws_mat, 2, quantile, probs = 0.95)
+  )
 }
+
+proj <- latest_by_player %>%
+  transmute(
+    playerid,
+    PlayerName,
+    role = role_raw
+  ) %>%
+  distinct()
+
+# Add outcomes
+for (k in seq_along(count_outcomes)) {
+  summary_k <- summarize_draws(rate_count[, , k])
+  names(summary_k) <- paste0(count_outcomes[k], "_", names(summary_k))
+  proj <- bind_cols(proj, summary_k)
+}
+
+write_csv(proj, output_projection_path)

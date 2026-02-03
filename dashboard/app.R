@@ -41,6 +41,42 @@ list_pdfs <- function(path) {
   files[order(files)]
 }
 
+pick_col <- function(df, candidates) {
+  hit <- candidates[candidates %in% names(df)]
+  if (length(hit) == 0) return(NULL)
+  hit[[1]]
+}
+
+read_atc_pa <- function() {
+  atc_path <- file.path(repo_root, "data", "atc_pa_projections_2026.csv")
+  if (!file.exists(atc_path)) return(NULL)
+  atc <- read_csv(atc_path, show_col_types = FALSE)
+  id_col <- pick_col(atc, c("playerid", "PlayerId", "player_id"))
+  pa_col <- pick_col(atc, c("PA", "pa"))
+  if (is.null(id_col) || is.null(pa_col)) return(NULL)
+  atc %>%
+    transmute(
+      playerid = as.character(.data[[id_col]]),
+      PA_atc = as.numeric(.data[[pa_col]])
+    ) %>%
+    filter(!is.na(playerid), !is.na(PA_atc))
+}
+
+read_atc_ip <- function() {
+  atc_path <- file.path(repo_root, "data", "atc_ip_projections_2026.csv")
+  if (!file.exists(atc_path)) return(NULL)
+  atc <- read_csv(atc_path, show_col_types = FALSE)
+  id_col <- pick_col(atc, c("playerid", "PlayerId", "player_id"))
+  ip_col <- pick_col(atc, c("IP", "ip"))
+  if (is.null(id_col) || is.null(ip_col)) return(NULL)
+  atc %>%
+    transmute(
+      playerid = as.character(.data[[id_col]]),
+      IP_atc = as.numeric(.data[[ip_col]])
+    ) %>%
+    filter(!is.na(playerid), !is.na(IP_atc))
+}
+
 outcome_choices <- function(files, prefixes) {
   if (length(files) == 0) return(character(0))
   labels <- files
@@ -88,9 +124,12 @@ ui <- dashboardPage(
       menuItem("Hitter Plots", tabName = "plots_hitters", icon = icon("chart-line")),
       menuItem("Starter Plots", tabName = "plots_sp", icon = icon("chart-line")),
       menuItem("Reliever Plots", tabName = "plots_rp", icon = icon("chart-line")),
-      menuItem("Composite Hitter Rankings", tabName = "hitters", icon = icon("table")),
-      menuItem("Composite Starter Rankings", tabName = "starters", icon = icon("table")),
-      menuItem("Composite Reliever Rankings", tabName = "relievers", icon = icon("table"))
+      menuItem("Hitter Projections", tabName = "hitter_projections", icon = icon("table")),
+      menuItem("Starter Projections", tabName = "sp_projections", icon = icon("table")),
+      menuItem("Reliever Projections", tabName = "rp_projections", icon = icon("table")),
+      menuItem("Hitter Composite Rankings", tabName = "hitters", icon = icon("table")),
+      menuItem("Starter Composite Rankings", tabName = "starters", icon = icon("table")),
+      menuItem("Reliever Composite Rankings", tabName = "relievers", icon = icon("table"))
     )
   ),
   dashboardBody(
@@ -194,6 +233,36 @@ ui <- dashboardPage(
         fluidRow(
           box(width = 12, DTOutput("rp_table"))
         )
+      ),
+      tabItem(
+        tabName = "hitter_projections",
+        fluidRow(
+          box(width = 12, uiOutput("hitter_proj_outcome_ui"))
+        ),
+        fluidRow(
+          box(width = 12, uiOutput("hitter_proj_position_ui"))
+        ),
+        fluidRow(
+          box(width = 12, DTOutput("hitter_proj_table"))
+        )
+      ),
+      tabItem(
+        tabName = "sp_projections",
+        fluidRow(
+          box(width = 12, uiOutput("sp_proj_outcome_ui"))
+        ),
+        fluidRow(
+          box(width = 12, DTOutput("sp_proj_table"))
+        )
+      ),
+      tabItem(
+        tabName = "rp_projections",
+        fluidRow(
+          box(width = 12, uiOutput("rp_proj_outcome_ui"))
+        ),
+        fluidRow(
+          box(width = 12, DTOutput("rp_proj_table"))
+        )
       )
     )
   )
@@ -215,7 +284,7 @@ server <- function(input, output, session) {
       tags$h4(tags$strong("What this does")),
       tags$ul(
         tags$li("Estimates latent player skill trajectories over time with shared year effects."),
-        tags$li("Produces 2026 projections and uncertainty intervals for each outcome."),
+        tags$li("Produces 2026 projections and uncertainty intervals (5th/95th percentiles) for each outcome."),
         tags$li("Builds composite rankings from category z-scores for hitters, starters, and relievers.")
       ),
       tags$div(style = "height: 12px;"),
@@ -317,12 +386,15 @@ render_plot_image <- function(file, subdir) {
   output$hitter_plot_image <- renderImage({
     type <- input$hitter_plot_type
     file <- input$hitter_outcome
+    req(file, nzchar(file))
     subdir <- if (type == "Fitted outcomes") {
       file.path("plots", "fitted_outcome_curves", "batters")
     } else {
       file.path("plots", "interval_projections", "batters")
     }
-    render_plot_image(file, subdir)
+    out <- render_plot_image(file, subdir)
+    req(!is.null(out))
+    out
   }, deleteFile = TRUE)
 
   output$hitter_position_ui <- renderUI({
@@ -334,26 +406,60 @@ render_plot_image <- function(file, subdir) {
     selectInput("hitter_position", "Position", choices = c("All", choices), selected = "All")
   })
 
+  output$hitter_proj_outcome_ui <- renderUI({
+    path <- file.path(results_root, "projections", "batters", "category_projections_2026.csv")
+    if (!file.exists(path)) return(NULL)
+    df <- read_csv(path, show_col_types = FALSE)
+    outcomes <- sub("_mean$", "", names(df)[grepl("_mean$", names(df))])
+    outcomes <- outcomes[order(outcomes)]
+    selectInput("hitter_proj_outcome", "Outcome", choices = outcomes)
+  })
+
+  output$hitter_proj_position_ui <- renderUI({
+    path <- file.path(results_root, "projections", "batters", "category_projections_2026.csv")
+    if (!file.exists(path)) return(NULL)
+    df <- read_csv(path, show_col_types = FALSE)
+    if (!"position" %in% names(df)) return(NULL)
+    choices <- sort(unique(sub("/.*$", "", df$position)))
+    selectInput("hitter_proj_position", "Position", choices = c("All", choices), selected = "All")
+  })
+
+  output$sp_proj_outcome_ui <- renderUI({
+    choices <- c("ERA", "K/9", "WHIP", "BB/9", "W", "Ks")
+    selectInput("sp_proj_outcome", "Outcome", choices = choices)
+  })
+
+  output$rp_proj_outcome_ui <- renderUI({
+    choices <- c("ERA", "K/9", "WHIP", "BB/9", "W", "Ks", "SVHLD")
+    selectInput("rp_proj_outcome", "Outcome", choices = choices)
+  })
+
   output$sp_plot_image <- renderImage({
     type <- input$sp_plot_type
     file <- input$sp_outcome
+    req(file, nzchar(file))
     subdir <- if (type == "Fitted outcomes") {
       file.path("plots", "fitted_outcome_curves", "pitchers", "starters")
     } else {
       file.path("plots", "interval_projections", "pitchers", "starters")
     }
-    render_plot_image(file, subdir)
+    out <- render_plot_image(file, subdir)
+    req(!is.null(out))
+    out
   }, deleteFile = TRUE)
 
   output$rp_plot_image <- renderImage({
     type <- input$rp_plot_type
     file <- input$rp_outcome
+    req(file, nzchar(file))
     subdir <- if (type == "Fitted outcomes") {
       file.path("plots", "fitted_outcome_curves", "pitchers", "relievers")
     } else {
       file.path("plots", "interval_projections", "pitchers", "relievers")
     }
-    render_plot_image(file, subdir)
+    out <- render_plot_image(file, subdir)
+    req(!is.null(out))
+    out
   }, deleteFile = TRUE)
 
   output$batters_table <- renderDT({
@@ -374,18 +480,22 @@ render_plot_image <- function(file, subdir) {
       df <- df %>% mutate(position = sub("/.*$", "", position))
     }
     if (all(c("Name", "position", "Composite z-score") %in% names(df))) {
-      df <- df %>% select(Name, position, `Composite z-score`, everything())
+      df <- df %>% rename(Position = position) %>% select(Name, Position, `Composite z-score`, everything())
     } else if (all(c("Name", "Composite z-score") %in% names(df))) {
       df <- df %>% select(Name, `Composite z-score`, everything())
-    }
-    if (!is.null(input$hitter_position) &&
-        input$hitter_position != "All" &&
-        "position" %in% names(df)) {
-      df <- df %>% filter(position == input$hitter_position)
     }
     score_cols <- names(df)[grepl("z-score$", names(df))]
     if (length(score_cols) > 0) {
       df[score_cols] <- lapply(df[score_cols], function(x) round(as.numeric(x), 2))
+    }
+    if (!is.null(input$hitter_position) &&
+        input$hitter_position != "All" &&
+        "Position" %in% names(df)) {
+      df <- df %>% filter(Position == input$hitter_position)
+    }
+    if ("Composite z-score" %in% names(df)) {
+      df <- df %>% mutate(Rank = dense_rank(desc(`Composite z-score`)))
+      df <- df %>% select(Rank, everything())
     }
     default_order <- if ("Composite z-score" %in% names(df)) {
       list(list(which(names(df) == "Composite z-score") - 1L, "desc"))
@@ -420,6 +530,10 @@ render_plot_image <- function(file, subdir) {
     if (length(score_cols) > 0) {
       df[score_cols] <- lapply(df[score_cols], function(x) round(as.numeric(x), 2))
     }
+    if ("Composite z-score" %in% names(df)) {
+      df <- df %>% mutate(Rank = dense_rank(desc(`Composite z-score`)))
+      df <- df %>% select(Rank, everything())
+    }
     default_order <- if ("Composite z-score" %in% names(df)) {
       list(list(which(names(df) == "Composite z-score") - 1L, "desc"))
     } else {
@@ -453,11 +567,237 @@ render_plot_image <- function(file, subdir) {
     if (length(score_cols) > 0) {
       df[score_cols] <- lapply(df[score_cols], function(x) round(as.numeric(x), 2))
     }
+    if ("Composite z-score" %in% names(df)) {
+      df <- df %>% mutate(Rank = dense_rank(desc(`Composite z-score`)))
+      df <- df %>% select(Rank, everything())
+    }
     default_order <- if ("Composite z-score" %in% names(df)) {
       list(list(which(names(df) == "Composite z-score") - 1L, "desc"))
     } else {
       list()
     }
+    datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
+  })
+
+  output$hitter_proj_table <- renderDT({
+    req(input$hitter_proj_outcome)
+    path <- file.path(results_root, "projections", "batters", "category_projections_2026.csv")
+    if (!file.exists(path)) return(NULL)
+    df <- read_csv(path, show_col_types = FALSE)
+    outcome <- input$hitter_proj_outcome
+    mean_col <- paste0(outcome, "_mean")
+    p05_col <- paste0(outcome, "_p05")
+    p95_col <- paste0(outcome, "_p95")
+    if (!all(c(mean_col, p05_col, p95_col) %in% names(df))) return(NULL)
+    df <- df %>% mutate(playerid = as.character(playerid))
+    if ("position" %in% names(df)) {
+      df <- df %>% mutate(Position = sub("/.*$", "", position))
+    }
+    count_outcomes <- c("H", "R", "RBI", "HR", "SB")
+    if (outcome %in% count_outcomes) {
+      atc <- read_atc_pa()
+      if (is.null(atc)) return(NULL)
+      df <- df %>% left_join(atc, by = "playerid") %>% filter(!is.na(PA_atc))
+      df <- df %>%
+        mutate(
+          !!mean_col := .data[[mean_col]] * PA_atc,
+          !!p05_col := .data[[p05_col]] * PA_atc,
+          !!p95_col := .data[[p95_col]] * PA_atc
+        )
+    }
+    df <- df %>%
+      transmute(
+        Name = PlayerName,
+        Position = if ("Position" %in% names(df)) Position else NA_character_,
+        `0.05 quantile` = .data[[p05_col]],
+        `Posterior mean` = .data[[mean_col]],
+        `0.95 quantile` = .data[[p95_col]]
+      )
+    if (!is.null(input$hitter_proj_position) &&
+        input$hitter_proj_position != "All" &&
+        "Position" %in% names(df)) {
+      df <- df %>% filter(Position == input$hitter_proj_position)
+    }
+    if ("Position" %in% names(df)) {
+      df <- df %>% select(Name, Position, `0.05 quantile`, `Posterior mean`, `0.95 quantile`)
+    }
+    if (outcome %in% c("AVG", "OBP", "SLG")) {
+      df <- df %>%
+        mutate(
+          `0.05 quantile` = formatC(as.numeric(`0.05 quantile`), format = "f", digits = 3),
+          `Posterior mean` = formatC(as.numeric(`Posterior mean`), format = "f", digits = 3),
+          `0.95 quantile` = formatC(as.numeric(`0.95 quantile`), format = "f", digits = 3)
+        )
+    } else {
+      df <- df %>%
+        mutate(
+          `0.05 quantile` = round(as.numeric(`0.05 quantile`), 0),
+          `Posterior mean` = round(as.numeric(`Posterior mean`), 0),
+          `0.95 quantile` = round(as.numeric(`0.95 quantile`), 0)
+        )
+    }
+    order_dir <- if (outcome %in% c("ERA", "WHIP", "BB/9")) "asc" else "desc"
+    default_order <- list(list(which(names(df) == "Posterior mean") - 1L, order_dir))
+    datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
+  })
+
+  output$sp_proj_table <- renderDT({
+    req(input$sp_proj_outcome)
+    path <- file.path(results_root, "projections", "pitchers", "sp_category_projections_2026.csv")
+    if (!file.exists(path)) return(NULL)
+    df <- read_csv(path, show_col_types = FALSE)
+    outcome <- input$sp_proj_outcome
+    df <- df %>% mutate(playerid = as.character(playerid))
+    atc <- read_atc_ip()
+    if (is.null(atc)) return(NULL)
+    df <- df %>% left_join(atc, by = "playerid") %>% filter(!is.na(IP_atc))
+
+    needed <- c(
+      "SO_mean", "SO_p05", "SO_p95",
+      "BB_mean", "BB_p05", "BB_p95",
+      "H_mean", "H_p05", "H_p95",
+      "ER_mean", "ER_p05", "ER_p95",
+      "W_mean", "W_p05", "W_p95"
+    )
+    if (!all(needed %in% names(df))) return(NULL)
+
+    df <- df %>%
+      mutate(
+        ERA_mean = ER_mean * 9,
+        ERA_p05 = ER_p05 * 9,
+        ERA_p95 = ER_p95 * 9,
+        K9_mean = SO_mean * 9,
+        K9_p05 = SO_p05 * 9,
+        K9_p95 = SO_p95 * 9,
+        BB9_mean = BB_mean * 9,
+        BB9_p05 = BB_p05 * 9,
+        BB9_p95 = BB_p95 * 9,
+        WHIP_mean = BB_mean + H_mean,
+        WHIP_p05 = BB_p05 + H_p05,
+        WHIP_p95 = BB_p95 + H_p95,
+        Ks_mean = SO_mean * IP_atc,
+        Ks_p05 = SO_p05 * IP_atc,
+        Ks_p95 = SO_p95 * IP_atc,
+        W_mean_t = W_mean * IP_atc,
+        W_p05_t = W_p05 * IP_atc,
+        W_p95_t = W_p95 * IP_atc
+      )
+
+    map <- list(
+      "ERA" = c("ERA_mean", "ERA_p05", "ERA_p95"),
+      "K/9" = c("K9_mean", "K9_p05", "K9_p95"),
+      "WHIP" = c("WHIP_mean", "WHIP_p05", "WHIP_p95"),
+      "BB/9" = c("BB9_mean", "BB9_p05", "BB9_p95"),
+      "W" = c("W_mean_t", "W_p05_t", "W_p95_t"),
+      "Ks" = c("Ks_mean", "Ks_p05", "Ks_p95")
+    )
+    cols <- map[[outcome]]
+    df <- df %>%
+      transmute(
+        Name = PlayerName,
+        `0.05 quantile` = .data[[cols[2]]],
+        `Posterior mean` = .data[[cols[1]]],
+        `0.95 quantile` = .data[[cols[3]]]
+      )
+    if (outcome %in% c("ERA", "K/9", "WHIP", "BB/9")) {
+      df <- df %>%
+        mutate(
+          `0.05 quantile` = formatC(as.numeric(`0.05 quantile`), format = "f", digits = 2),
+          `Posterior mean` = formatC(as.numeric(`Posterior mean`), format = "f", digits = 2),
+          `0.95 quantile` = formatC(as.numeric(`0.95 quantile`), format = "f", digits = 2)
+        )
+    } else {
+      df <- df %>%
+        mutate(
+          `0.05 quantile` = round(as.numeric(`0.05 quantile`), 0),
+          `Posterior mean` = round(as.numeric(`Posterior mean`), 0),
+          `0.95 quantile` = round(as.numeric(`0.95 quantile`), 0)
+        )
+    }
+    order_dir <- if (outcome %in% c("ERA", "WHIP", "BB/9")) "asc" else "desc"
+    default_order <- list(list(which(names(df) == "Posterior mean") - 1L, order_dir))
+    datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
+  })
+
+  output$rp_proj_table <- renderDT({
+    req(input$rp_proj_outcome)
+    path <- file.path(results_root, "projections", "pitchers", "rp_category_projections_2026.csv")
+    if (!file.exists(path)) return(NULL)
+    df <- read_csv(path, show_col_types = FALSE)
+    outcome <- input$rp_proj_outcome
+    df <- df %>% mutate(playerid = as.character(playerid))
+    atc <- read_atc_ip()
+    if (is.null(atc)) return(NULL)
+    df <- df %>% left_join(atc, by = "playerid") %>% filter(!is.na(IP_atc))
+
+    needed <- c(
+      "SO_mean", "SO_p05", "SO_p95",
+      "BB_mean", "BB_p05", "BB_p95",
+      "H_mean", "H_p05", "H_p95",
+      "ER_mean", "ER_p05", "ER_p95",
+      "W_mean", "W_p05", "W_p95",
+      "SVHLD_mean", "SVHLD_p05", "SVHLD_p95"
+    )
+    if (!all(needed %in% names(df))) return(NULL)
+
+    df <- df %>%
+      mutate(
+        ERA_mean = ER_mean * 9,
+        ERA_p05 = ER_p05 * 9,
+        ERA_p95 = ER_p95 * 9,
+        K9_mean = SO_mean * 9,
+        K9_p05 = SO_p05 * 9,
+        K9_p95 = SO_p95 * 9,
+        BB9_mean = BB_mean * 9,
+        BB9_p05 = BB_p05 * 9,
+        BB9_p95 = BB_p95 * 9,
+        WHIP_mean = BB_mean + H_mean,
+        WHIP_p05 = BB_p05 + H_p05,
+        WHIP_p95 = BB_p95 + H_p95,
+        Ks_mean = SO_mean * IP_atc,
+        Ks_p05 = SO_p05 * IP_atc,
+        Ks_p95 = SO_p95 * IP_atc,
+        W_mean_t = W_mean * IP_atc,
+        W_p05_t = W_p05 * IP_atc,
+        W_p95_t = W_p95 * IP_atc,
+        SVHLD_mean_t = SVHLD_mean * IP_atc,
+        SVHLD_p05_t = SVHLD_p05 * IP_atc,
+        SVHLD_p95_t = SVHLD_p95 * IP_atc
+      )
+
+    map <- list(
+      "ERA" = c("ERA_mean", "ERA_p05", "ERA_p95"),
+      "K/9" = c("K9_mean", "K9_p05", "K9_p95"),
+      "WHIP" = c("WHIP_mean", "WHIP_p05", "WHIP_p95"),
+      "BB/9" = c("BB9_mean", "BB9_p05", "BB9_p95"),
+      "W" = c("W_mean_t", "W_p05_t", "W_p95_t"),
+      "Ks" = c("Ks_mean", "Ks_p05", "Ks_p95"),
+      "SVHLD" = c("SVHLD_mean_t", "SVHLD_p05_t", "SVHLD_p95_t")
+    )
+    cols <- map[[outcome]]
+    df <- df %>%
+      transmute(
+        Name = PlayerName,
+        `0.05 quantile` = .data[[cols[2]]],
+        `Posterior mean` = .data[[cols[1]]],
+        `0.95 quantile` = .data[[cols[3]]]
+      )
+    if (outcome %in% c("ERA", "K/9", "WHIP", "BB/9")) {
+      df <- df %>%
+        mutate(
+          `0.05 quantile` = formatC(as.numeric(`0.05 quantile`), format = "f", digits = 2),
+          `Posterior mean` = formatC(as.numeric(`Posterior mean`), format = "f", digits = 2),
+          `0.95 quantile` = formatC(as.numeric(`0.95 quantile`), format = "f", digits = 2)
+        )
+    } else {
+      df <- df %>%
+        mutate(
+          `0.05 quantile` = round(as.numeric(`0.05 quantile`), 0),
+          `Posterior mean` = round(as.numeric(`Posterior mean`), 0),
+          `0.95 quantile` = round(as.numeric(`0.95 quantile`), 0)
+        )
+    }
+    default_order <- list(list(which(names(df) == "Posterior mean") - 1L, "desc"))
     datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
   })
 }

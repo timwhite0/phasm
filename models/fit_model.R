@@ -206,53 +206,54 @@ if (run_fit) {
     refresh = refresh,
     control = list(adapt_delta = 0.9, max_treedepth = 12)
   )
-
   saveRDS(fit, output_fit_path)
-
-  # Extract predictions
-  eta_pred <- rstan::extract(fit, pars = "eta_pred")$eta_pred
-
-  # Summarize predictions per player
-  # Outcomes order: H, R, RBI, HR, SB, AVG, OBP, SLG
-  # Count outcomes: exp(eta) gives per-PA rate
-  rate_count <- exp(eta_pred[, , 1:length(count_outcomes)])
-  avg_pred <- inv_logit(eta_pred[, , length(count_outcomes) + 1])
-  obp_pred <- inv_logit(eta_pred[, , length(count_outcomes) + 2])
-  slg_pred <- pmax(exp(eta_pred[, , length(count_outcomes) + 3]) - epsilon, 0)
-
-  summarize_draws <- function(draws_mat) {
-    tibble(
-      mean = apply(draws_mat, 2, mean),
-      p10 = apply(draws_mat, 2, quantile, probs = 0.10),
-      p50 = apply(draws_mat, 2, quantile, probs = 0.50),
-      p90 = apply(draws_mat, 2, quantile, probs = 0.90)
-    )
-  }
-
-  proj <- latest_by_player %>%
-    transmute(
-      playerid,
-      PlayerName,
-      position = pos_raw
-    ) %>%
-    distinct()
-
-  # Add count outcomes
-  for (k in seq_along(count_outcomes)) {
-    summary_k <- summarize_draws(rate_count[, , k])
-    names(summary_k) <- paste0(count_outcomes[k], "_", names(summary_k))
-    proj <- bind_cols(proj, summary_k)
-  }
-
-  # Add continuous outcomes
-  summary_avg <- summarize_draws(avg_pred)
-  names(summary_avg) <- paste0("AVG_", names(summary_avg))
-  summary_obp <- summarize_draws(obp_pred)
-  names(summary_obp) <- paste0("OBP_", names(summary_obp))
-  summary_slg <- summarize_draws(slg_pred)
-  names(summary_slg) <- paste0("SLG_", names(summary_slg))
-
-  proj <- bind_cols(proj, summary_avg, summary_obp, summary_slg)
-
-  write_csv(proj, output_projection_path)
+} else {
+  fit <- readRDS(output_fit_path)
 }
+
+# Extract predictions
+eta_pred <- rstan::extract(fit, pars = "eta_pred")$eta_pred
+
+# Summarize predictions per player
+# Outcomes order: H, R, RBI, HR, SB, AVG, OBP, SLG
+# Count outcomes: exp(eta) gives per-PA rate
+rate_count <- exp(eta_pred[, , 1:length(count_outcomes)])
+avg_pred <- inv_logit(eta_pred[, , length(count_outcomes) + 1])
+obp_pred <- inv_logit(eta_pred[, , length(count_outcomes) + 2])
+slg_pred <- pmax(exp(eta_pred[, , length(count_outcomes) + 3]) - epsilon, 0)
+
+summarize_draws <- function(draws_mat) {
+  tibble(
+    mean = apply(draws_mat, 2, mean),
+    p05 = apply(draws_mat, 2, quantile, probs = 0.05),
+    p50 = apply(draws_mat, 2, quantile, probs = 0.50),
+    p95 = apply(draws_mat, 2, quantile, probs = 0.95)
+  )
+}
+
+proj <- latest_by_player %>%
+  transmute(
+    playerid,
+    PlayerName,
+    position = pos_raw
+  ) %>%
+  distinct()
+
+# Add count outcomes
+for (k in seq_along(count_outcomes)) {
+  summary_k <- summarize_draws(rate_count[, , k])
+  names(summary_k) <- paste0(count_outcomes[k], "_", names(summary_k))
+  proj <- bind_cols(proj, summary_k)
+}
+
+# Add continuous outcomes
+summary_avg <- summarize_draws(avg_pred)
+names(summary_avg) <- paste0("AVG_", names(summary_avg))
+summary_obp <- summarize_draws(obp_pred)
+names(summary_obp) <- paste0("OBP_", names(summary_obp))
+summary_slg <- summarize_draws(slg_pred)
+names(summary_slg) <- paste0("SLG_", names(summary_slg))
+
+proj <- bind_cols(proj, summary_avg, summary_obp, summary_slg)
+
+write_csv(proj, output_projection_path)

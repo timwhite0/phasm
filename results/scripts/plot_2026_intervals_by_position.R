@@ -47,24 +47,24 @@ rate_cats <- c("AVG", "OBP", "SLG")
 
 build_category_df <- function(cat) {
   mean_col <- paste0(cat, "_mean")
-  p10_col <- paste0(cat, "_p10")
-  p90_col <- paste0(cat, "_p90")
+  p05_col <- paste0(cat, "_p05")
+  p95_col <- paste0(cat, "_p95")
 
-  if (!all(c(mean_col, p10_col, p90_col) %in% names(proj))) {
+  if (!all(c(mean_col, p05_col, p95_col) %in% names(proj))) {
     return(NULL)
   }
 
   out <- proj %>%
-    select(playerid, PlayerName, position, PA, all_of(mean_col), all_of(p10_col), all_of(p90_col)) %>%
-    rename(mean = all_of(mean_col), p10 = all_of(p10_col), p90 = all_of(p90_col)) %>%
+    select(playerid, PlayerName, position, PA, all_of(mean_col), all_of(p05_col), all_of(p95_col)) %>%
+    rename(mean = all_of(mean_col), p05 = all_of(p05_col), p95 = all_of(p95_col)) %>%
     mutate(category = cat)
 
   if (cat %in% count_cats) {
     out <- out %>%
       mutate(
         mean = mean * PA,
-        p10 = p10 * PA,
-        p90 = p90 * PA
+        p05 = p05 * PA,
+        p95 = p95 * PA
       )
   }
 
@@ -73,7 +73,7 @@ build_category_df <- function(cat) {
 
 cat_frames <- lapply(c(count_cats, rate_cats), build_category_df)
 cat_df <- bind_rows(cat_frames) %>%
-  filter(!is.na(position), !is.na(mean), !is.na(p10), !is.na(p90)) %>%
+  filter(!is.na(position), !is.na(mean), !is.na(p05), !is.na(p95)) %>%
   mutate(
     position = str_trim(str_replace(position, "/.*", "")),
     position = as.character(position)
@@ -102,7 +102,7 @@ plot_position <- function(pos) {
     ungroup()
 
   p <- ggplot(pos_df, aes(x = PlayerName_plot, y = mean)) +
-    geom_linerange(aes(ymin = p10, ymax = p90), color = "gray45", linewidth = 0.6) +
+    geom_linerange(aes(ymin = p05, ymax = p95), color = "gray45", linewidth = 0.6) +
     geom_point(color = "dodgerblue", size = 1.6) +
     coord_flip() +
     facet_wrap(~ category, scales = "free") +
