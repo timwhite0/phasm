@@ -239,6 +239,8 @@ for (metric in metrics) {
 
   write_csv(plot_df, file.path(results_dir, paste0("rp_latent_fit_derived_", metric, "_data.csv")))
 
+  display_label <- dplyr::recode(metric, K9 = "K/9", BB9 = "BB/9", .default = metric)
+
   p <- ggplot(plot_df, aes(x = Season, group = PlayerName)) +
     geom_linerange(aes(ymin = fitted_p05, ymax = fitted_p95, color = type), linewidth = 0.6, alpha = 0.7, na.rm = TRUE) +
     geom_line(data = plot_df %>% filter(type == "fit"), aes(y = fitted_mean), color = "goldenrod", linewidth = 0.7) +
@@ -250,8 +252,8 @@ for (metric in metrics) {
     scale_x_continuous(breaks = 2018:2026) +
     scale_color_manual(values = c(fit = "goldenrod", projection = "dodgerblue")) +
     labs(
-      title = paste0(metric, ": observed (black), fitted (gold), 2026 projection (blue)"),
-      y = metric,
+      title = paste0(display_label, ": observed (black), fitted (gold), 2026 projection (blue)"),
+      y = display_label,
       x = "Season"
     ) +
     theme(

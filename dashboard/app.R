@@ -85,6 +85,8 @@ outcome_choices <- function(files, prefixes) {
   }
   labels <- sub("\\.pdf$", "", labels)
   labels <- gsub("_", " ", labels)
+  labels <- gsub("BB9", "BB/9", labels)
+  labels <- gsub("K9", "K/9", labels)
   names(files) <- labels
   files
 }
@@ -428,7 +430,7 @@ render_plot_image <- function(file, subdir) {
   })
 
   output$sp_proj_outcome_ui <- renderUI({
-    choices <- c("ERA", "K/9", "WHIP", "BB/9", "W", "Ks")
+    choices <- c("ERA", "K/9", "WHIP", "BB/9", "W", "Ks", "QS")
     selectInput("sp_proj_outcome", "Outcome", choices = choices)
   })
 
@@ -651,7 +653,8 @@ render_plot_image <- function(file, subdir) {
       "WHIP_mean", "WHIP_p05", "WHIP_p95",
       "BB9_mean", "BB9_p05", "BB9_p95",
       "Ks_mean", "Ks_p05", "Ks_p95",
-      "W_mean_t", "W_p05_t", "W_p95_t"
+      "W_mean_t", "W_p05_t", "W_p95_t",
+      "QS_mean_t", "QS_p05_t", "QS_p95_t"
     )
     if (!all(needed %in% names(df))) return(NULL)
 
@@ -661,7 +664,8 @@ render_plot_image <- function(file, subdir) {
       "WHIP" = c("WHIP_mean", "WHIP_p05", "WHIP_p95"),
       "BB/9" = c("BB9_mean", "BB9_p05", "BB9_p95"),
       "W" = c("W_mean_t", "W_p05_t", "W_p95_t"),
-      "Ks" = c("Ks_mean", "Ks_p05", "Ks_p95")
+      "Ks" = c("Ks_mean", "Ks_p05", "Ks_p95"),
+      "QS" = c("QS_mean_t", "QS_p05_t", "QS_p95_t")
     )
     cols <- map[[outcome]]
     df <- df %>%
@@ -671,24 +675,15 @@ render_plot_image <- function(file, subdir) {
         `Posterior mean` = .data[[cols[1]]],
         `0.95 quantile` = .data[[cols[3]]]
       )
-    if (outcome %in% c("ERA", "K/9", "WHIP", "BB/9")) {
-      df <- df %>%
-        mutate(
-          `0.05 quantile` = formatC(as.numeric(`0.05 quantile`), format = "f", digits = 2),
-          `Posterior mean` = formatC(as.numeric(`Posterior mean`), format = "f", digits = 2),
-          `0.95 quantile` = formatC(as.numeric(`0.95 quantile`), format = "f", digits = 2)
-        )
-    } else {
-      df <- df %>%
-        mutate(
-          `0.05 quantile` = round(as.numeric(`0.05 quantile`), 0),
-          `Posterior mean` = round(as.numeric(`Posterior mean`), 0),
-          `0.95 quantile` = round(as.numeric(`0.95 quantile`), 0)
-        )
-    }
     order_dir <- if (outcome %in% c("ERA", "WHIP", "BB/9")) "asc" else "desc"
     default_order <- list(list(which(names(df) == "Posterior mean") - 1L, order_dir))
-    datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
+    dt <- datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
+    if (outcome %in% c("ERA", "K/9", "WHIP", "BB/9")) {
+      dt <- formatRound(dt, columns = c("0.05 quantile", "Posterior mean", "0.95 quantile"), digits = 2)
+    } else {
+      dt <- formatRound(dt, columns = c("0.05 quantile", "Posterior mean", "0.95 quantile"), digits = 0)
+    }
+    dt
   })
 
   output$rp_proj_table <- renderDT({
@@ -725,23 +720,15 @@ render_plot_image <- function(file, subdir) {
         `Posterior mean` = .data[[cols[1]]],
         `0.95 quantile` = .data[[cols[3]]]
       )
+    order_dir <- if (outcome %in% c("ERA", "WHIP", "BB/9")) "asc" else "desc"
+    default_order <- list(list(which(names(df) == "Posterior mean") - 1L, order_dir))
+    dt <- datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
     if (outcome %in% c("ERA", "K/9", "WHIP", "BB/9")) {
-      df <- df %>%
-        mutate(
-          `0.05 quantile` = formatC(as.numeric(`0.05 quantile`), format = "f", digits = 2),
-          `Posterior mean` = formatC(as.numeric(`Posterior mean`), format = "f", digits = 2),
-          `0.95 quantile` = formatC(as.numeric(`0.95 quantile`), format = "f", digits = 2)
-        )
+      dt <- formatRound(dt, columns = c("0.05 quantile", "Posterior mean", "0.95 quantile"), digits = 2)
     } else {
-      df <- df %>%
-        mutate(
-          `0.05 quantile` = round(as.numeric(`0.05 quantile`), 0),
-          `Posterior mean` = round(as.numeric(`Posterior mean`), 0),
-          `0.95 quantile` = round(as.numeric(`0.95 quantile`), 0)
-        )
+      dt <- formatRound(dt, columns = c("0.05 quantile", "Posterior mean", "0.95 quantile"), digits = 0)
     }
-    default_order <- list(list(which(names(df) == "Posterior mean") - 1L, "desc"))
-    datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
+    dt
   })
 }
 

@@ -106,7 +106,10 @@ plot_role <- function(role_name) {
     metric_df <- role_df %>%
       select(playerid, PlayerName, all_of(mean_col), all_of(p05_col), all_of(p95_col)) %>%
       rename(mean = all_of(mean_col), p05 = all_of(p05_col), p95 = all_of(p95_col)) %>%
-      mutate(metric = metric)
+      mutate(
+        metric = metric,
+        metric_label = dplyr::recode(metric, K9 = "K/9", BB9 = "BB/9", .default = metric)
+      )
 
     metric_df <- if (metric %in% c("ERA", "WHIP", "BB9")) {
       metric_df %>% arrange(mean) %>% slice(1:30)
@@ -117,7 +120,7 @@ plot_role <- function(role_name) {
     desc_flag <- metric %in% c("ERA", "WHIP", "BB9")
     metric_df <- metric_df %>%
       mutate(
-        PlayerName_plot = paste(PlayerName, metric, sep = "___"),
+        PlayerName_plot = paste(PlayerName, metric_label, sep = "___"),
         PlayerName_plot = fct_reorder(PlayerName_plot, mean, .desc = desc_flag)
       )
 
@@ -131,7 +134,7 @@ plot_role <- function(role_name) {
     geom_linerange(aes(ymin = p05, ymax = p95), color = "gray45", linewidth = 0.6) +
     geom_point(color = "dodgerblue", size = 1.6) +
     coord_flip() +
-    facet_wrap(~ metric, scales = "free") +
+    facet_wrap(~ metric_label, scales = "free") +
     scale_x_discrete(labels = function(x) str_replace(x, "___.*", ""), drop = TRUE) +
     theme_minimal(base_size = 11) +
     labs(

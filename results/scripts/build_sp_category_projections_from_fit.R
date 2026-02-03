@@ -85,7 +85,11 @@ proj <- proj %>%
     W_mean_t = W_mean * IP_atc,
     W_p05_t = W_p05 * IP_atc,
     W_p50_t = W_p50 * IP_atc,
-    W_p95_t = W_p95 * IP_atc
+    W_p95_t = W_p95 * IP_atc,
+    QS_mean_t = QS_mean * IP_atc,
+    QS_p05_t = QS_p05 * IP_atc,
+    QS_p50_t = QS_p50 * IP_atc,
+    QS_p95_t = QS_p95 * IP_atc
   )
 
 write_csv(proj, output_projection_path)
