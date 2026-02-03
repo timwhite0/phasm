@@ -30,14 +30,28 @@ Category projection outputs include posterior mean and quantiles (p05, p50, p95)
   - `models/model_fit.rds`
   - `models/model_inputs.rds`
   - `results/projections/batters/category_projections_2026.csv`
+- Hitter projection refresh (no refit):
+  - `results/scripts/build_batter_category_projections_from_fit.R`
 - SP outputs (after fitting):
   - `models/sp_model_fit.rds`
   - `models/sp_model_inputs.rds`
   - `results/projections/pitchers/sp_category_projections_2026.csv`
+- SP projection refresh (no refit):
+  - `results/scripts/build_sp_category_projections_from_fit.R`
 - RP outputs (after fitting):
   - `models/rp_model_fit.rds`
   - `models/rp_model_inputs.rds`
   - `results/projections/pitchers/rp_category_projections_2026.csv`
+- RP projection refresh (no refit):
+  - `results/scripts/build_rp_category_projections_from_fit.R`
+
+## Plots
+- Fitted outcome curves:
+  - Hitters: all modeled outcomes.
+  - Starters: W and QS (per-IP), plus derived ERA/K/9/BB/9/WHIP.
+  - Relievers: W and SVHLD (per-IP), plus derived ERA/K/9/BB/9/WHIP.
+- Interval projections:
+  - Hitters by position; starters/relievers by role.
 
 ## Covariates used
 - Age (standardized) and age^2

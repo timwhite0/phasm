@@ -15,10 +15,6 @@ if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)
 prep <- readRDS(prep_path)
 
 cat_defs <- list(
-  SO = 'SO_mean',
-  BB = 'BB_mean',
-  H = 'H_mean',
-  ER = 'ER_mean',
   W = 'W_mean',
   QS = 'QS_mean'
 )

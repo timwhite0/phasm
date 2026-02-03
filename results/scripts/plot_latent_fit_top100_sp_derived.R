@@ -120,6 +120,7 @@ rate_pred <- exp(eta_pred[, keep_idx, , drop = FALSE])
 metric_draws <- list(
   ERA = rate_pred[, , 4] * 9,
   K9 = rate_pred[, , 1] * 9,
+  BB9 = rate_pred[, , 2] * 9,
   WHIP = rate_pred[, , 2] + rate_pred[, , 3]
 )
 
@@ -140,12 +141,12 @@ for (metric in names(proj_summaries)) {
   proj_metrics <- add_metric_cols(proj_metrics, metric, proj_summaries[[metric]])
 }
 
-metrics <- c("ERA", "K9", "WHIP")
+metrics <- c("ERA", "K9", "BB9", "WHIP")
 
 top_players <- list()
 for (metric in metrics) {
   mean_col <- paste0(metric, "_mean")
-  if (metric %in% c("ERA", "WHIP")) {
+  if (metric %in% c("ERA", "WHIP", "BB9")) {
     ids <- proj_metrics %>%
       arrange(.data[[mean_col]]) %>%
       slice(1:100) %>%
@@ -174,6 +175,7 @@ for (metric in metrics) {
       metric,
       ERA = rate[, 4] * 9,
       K9 = rate[, 1] * 9,
+      BB9 = rate[, 2] * 9,
       WHIP = rate[, 2] + rate[, 3]
     )
     summaries[[i]] <- summarize_draws(draws)
@@ -186,6 +188,7 @@ for (metric in metrics) {
       metric,
       ERA = (obs$ER / obs$IP) * 9,
       K9 = (obs$SO / obs$IP) * 9,
+      BB9 = (obs$BB / obs$IP) * 9,
       WHIP = (obs$BB + obs$H) / obs$IP
     )
     sum_o <- summaries[[i]]
@@ -226,7 +229,7 @@ for (metric in metrics) {
 
   order_df <- plot_df %>%
     filter(Season == 2026L)
-  if (metric %in% c("ERA", "WHIP")) {
+  if (metric %in% c("ERA", "WHIP", "BB9")) {
     order_df <- order_df %>% arrange(fitted_mean)
   } else {
     order_df <- order_df %>% arrange(desc(fitted_mean))

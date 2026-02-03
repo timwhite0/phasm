@@ -323,8 +323,11 @@ server <- function(input, output, session) {
       tags$ul(
         tags$li("Overview: This summary of the model and app contents."),
         tags$li("Hitter Plots: Fitted outcomes and interval projections for hitters."),
-        tags$li("Starter Plots: Fitted outcomes and interval projections for starters."),
-        tags$li("Reliever Plots: Fitted outcomes and interval projections for relievers."),
+        tags$li("Starter Plots: Fitted outcomes for W/QS plus derived ERA/K/9/BB/9/WHIP; interval projections by role."),
+        tags$li("Reliever Plots: Fitted outcomes for W/SVHLD plus derived ERA/K/9/BB/9/WHIP; interval projections by role."),
+        tags$li("Hitter Projections: Outcome-specific posterior mean and quantiles (with PA scaling for counts)."),
+        tags$li("Starter Projections: Outcome-specific posterior mean and quantiles (with IP scaling)."),
+        tags$li("Reliever Projections: Outcome-specific posterior mean and quantiles (with IP scaling)."),
         tags$li("Composite Hitter Rankings: Sortable composite z-score table for hitters."),
         tags$li("Composite Starter Rankings: Sortable composite z-score table for starters."),
         tags$li("Composite Reliever Rankings: Sortable composite z-score table for relievers.")
@@ -647,41 +650,15 @@ render_plot_image <- function(file, subdir) {
     if (!file.exists(path)) return(NULL)
     df <- read_csv(path, show_col_types = FALSE)
     outcome <- input$sp_proj_outcome
-    df <- df %>% mutate(playerid = as.character(playerid))
-    atc <- read_atc_ip()
-    if (is.null(atc)) return(NULL)
-    df <- df %>% left_join(atc, by = "playerid") %>% filter(!is.na(IP_atc))
-
     needed <- c(
-      "SO_mean", "SO_p05", "SO_p95",
-      "BB_mean", "BB_p05", "BB_p95",
-      "H_mean", "H_p05", "H_p95",
-      "ER_mean", "ER_p05", "ER_p95",
-      "W_mean", "W_p05", "W_p95"
+      "ERA_mean", "ERA_p05", "ERA_p95",
+      "K9_mean", "K9_p05", "K9_p95",
+      "WHIP_mean", "WHIP_p05", "WHIP_p95",
+      "BB9_mean", "BB9_p05", "BB9_p95",
+      "Ks_mean", "Ks_p05", "Ks_p95",
+      "W_mean_t", "W_p05_t", "W_p95_t"
     )
     if (!all(needed %in% names(df))) return(NULL)
-
-    df <- df %>%
-      mutate(
-        ERA_mean = ER_mean * 9,
-        ERA_p05 = ER_p05 * 9,
-        ERA_p95 = ER_p95 * 9,
-        K9_mean = SO_mean * 9,
-        K9_p05 = SO_p05 * 9,
-        K9_p95 = SO_p95 * 9,
-        BB9_mean = BB_mean * 9,
-        BB9_p05 = BB_p05 * 9,
-        BB9_p95 = BB_p95 * 9,
-        WHIP_mean = BB_mean + H_mean,
-        WHIP_p05 = BB_p05 + H_p05,
-        WHIP_p95 = BB_p95 + H_p95,
-        Ks_mean = SO_mean * IP_atc,
-        Ks_p05 = SO_p05 * IP_atc,
-        Ks_p95 = SO_p95 * IP_atc,
-        W_mean_t = W_mean * IP_atc,
-        W_p05_t = W_p05 * IP_atc,
-        W_p95_t = W_p95 * IP_atc
-      )
 
     map <- list(
       "ERA" = c("ERA_mean", "ERA_p05", "ERA_p95"),
@@ -725,45 +702,16 @@ render_plot_image <- function(file, subdir) {
     if (!file.exists(path)) return(NULL)
     df <- read_csv(path, show_col_types = FALSE)
     outcome <- input$rp_proj_outcome
-    df <- df %>% mutate(playerid = as.character(playerid))
-    atc <- read_atc_ip()
-    if (is.null(atc)) return(NULL)
-    df <- df %>% left_join(atc, by = "playerid") %>% filter(!is.na(IP_atc))
-
     needed <- c(
-      "SO_mean", "SO_p05", "SO_p95",
-      "BB_mean", "BB_p05", "BB_p95",
-      "H_mean", "H_p05", "H_p95",
-      "ER_mean", "ER_p05", "ER_p95",
-      "W_mean", "W_p05", "W_p95",
-      "SVHLD_mean", "SVHLD_p05", "SVHLD_p95"
+      "ERA_mean", "ERA_p05", "ERA_p95",
+      "K9_mean", "K9_p05", "K9_p95",
+      "WHIP_mean", "WHIP_p05", "WHIP_p95",
+      "BB9_mean", "BB9_p05", "BB9_p95",
+      "Ks_mean", "Ks_p05", "Ks_p95",
+      "W_mean_t", "W_p05_t", "W_p95_t",
+      "SVHLD_mean_t", "SVHLD_p05_t", "SVHLD_p95_t"
     )
     if (!all(needed %in% names(df))) return(NULL)
-
-    df <- df %>%
-      mutate(
-        ERA_mean = ER_mean * 9,
-        ERA_p05 = ER_p05 * 9,
-        ERA_p95 = ER_p95 * 9,
-        K9_mean = SO_mean * 9,
-        K9_p05 = SO_p05 * 9,
-        K9_p95 = SO_p95 * 9,
-        BB9_mean = BB_mean * 9,
-        BB9_p05 = BB_p05 * 9,
-        BB9_p95 = BB_p95 * 9,
-        WHIP_mean = BB_mean + H_mean,
-        WHIP_p05 = BB_p05 + H_p05,
-        WHIP_p95 = BB_p95 + H_p95,
-        Ks_mean = SO_mean * IP_atc,
-        Ks_p05 = SO_p05 * IP_atc,
-        Ks_p95 = SO_p95 * IP_atc,
-        W_mean_t = W_mean * IP_atc,
-        W_p05_t = W_p05 * IP_atc,
-        W_p95_t = W_p95 * IP_atc,
-        SVHLD_mean_t = SVHLD_mean * IP_atc,
-        SVHLD_p05_t = SVHLD_p05 * IP_atc,
-        SVHLD_p95_t = SVHLD_p95 * IP_atc
-      )
 
     map <- list(
       "ERA" = c("ERA_mean", "ERA_p05", "ERA_p95"),
