@@ -8,6 +8,7 @@ fit_path <- "models/model_fit.rds"
 prep_path <- "models/model_inputs.rds"
 input_path <- "data/fangraphs_batters_2018_2025.csv"
 output_projection_path <- "results/projections/batters/category_projections_2026.csv"
+atc_pa_path <- "data/atc_pa_projections_2026.csv"
 
 count_outcomes <- c("H", "R", "RBI", "HR", "SB")
 cont_outcomes <- c("AVG", "OBP", "SLG")
@@ -35,8 +36,25 @@ latest_lookup <- latest_by_player %>%
     position = pos_raw
   )
 
+pick_col <- function(df, candidates) {
+  hit <- candidates[candidates %in% names(df)]
+  if (length(hit) == 0) return(NULL)
+  hit[[1]]
+}
+
+atc <- read_csv(atc_pa_path, show_col_types = FALSE)
+id_col <- pick_col(atc, c("playerid", "PlayerId", "player_id"))
+pa_col <- pick_col(atc, c("PA", "pa"))
+if (is.null(id_col) || is.null(pa_col)) {
+  stop("ATC PA file must include playerid and PA columns: ", atc_pa_path)
+}
+atc <- atc %>%
+  transmute(playerid = as.character(.data[[id_col]]), PA_atc = as.numeric(.data[[pa_col]])) %>%
+  filter(!is.na(playerid), !is.na(PA_atc))
+
 proj <- player_lookup %>%
   left_join(latest_lookup, by = c("playerid", "PlayerName")) %>%
+  left_join(atc, by = "playerid") %>%
   mutate(position = if_else(is.na(position) | position == "", "UNK", position))
 
 eta_pred <- rstan::extract(fit, pars = "eta_pred")$eta_pred
@@ -69,5 +87,29 @@ summary_slg <- summarize_draws(slg_pred)
 names(summary_slg) <- paste0("SLG_", names(summary_slg))
 
 proj <- bind_cols(proj, summary_avg, summary_obp, summary_slg)
+
+proj <- proj %>%
+  mutate(
+    H_mean_t = H_mean * PA_atc,
+    H_p05_t = H_p05 * PA_atc,
+    H_p50_t = H_p50 * PA_atc,
+    H_p95_t = H_p95 * PA_atc,
+    R_mean_t = R_mean * PA_atc,
+    R_p05_t = R_p05 * PA_atc,
+    R_p50_t = R_p50 * PA_atc,
+    R_p95_t = R_p95 * PA_atc,
+    RBI_mean_t = RBI_mean * PA_atc,
+    RBI_p05_t = RBI_p05 * PA_atc,
+    RBI_p50_t = RBI_p50 * PA_atc,
+    RBI_p95_t = RBI_p95 * PA_atc,
+    HR_mean_t = HR_mean * PA_atc,
+    HR_p05_t = HR_p05 * PA_atc,
+    HR_p50_t = HR_p50 * PA_atc,
+    HR_p95_t = HR_p95 * PA_atc,
+    SB_mean_t = SB_mean * PA_atc,
+    SB_p05_t = SB_p05 * PA_atc,
+    SB_p50_t = SB_p50 * PA_atc,
+    SB_p95_t = SB_p95 * PA_atc
+  )
 
 write_csv(proj, output_projection_path)

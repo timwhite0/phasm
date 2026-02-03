@@ -598,16 +598,11 @@ render_plot_image <- function(file, subdir) {
     }
     count_outcomes <- c("H", "R", "RBI", "HR", "SB")
     if (outcome %in% count_outcomes) {
-      atc <- read_atc_pa()
-      if (is.null(atc)) return(NULL)
-      df <- df %>% left_join(atc, by = "playerid") %>% filter(!is.na(PA_atc))
-      df <- df %>%
-        mutate(
-          !!mean_col := .data[[mean_col]] * PA_atc,
-          !!p05_col := .data[[p05_col]] * PA_atc,
-          !!p95_col := .data[[p95_col]] * PA_atc
-        )
+      mean_col <- paste0(outcome, "_mean_t")
+      p05_col <- paste0(outcome, "_p05_t")
+      p95_col <- paste0(outcome, "_p95_t")
     }
+    if (!all(c(mean_col, p05_col, p95_col) %in% names(df))) return(NULL)
     df <- df %>%
       transmute(
         Name = PlayerName,
