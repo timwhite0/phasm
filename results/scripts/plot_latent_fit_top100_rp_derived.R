@@ -243,14 +243,14 @@ for (metric in metrics) {
 
   p <- ggplot(plot_df, aes(x = Season, group = PlayerName)) +
     geom_linerange(aes(ymin = fitted_p05, ymax = fitted_p95, color = type), linewidth = 0.6, alpha = 0.7, na.rm = TRUE) +
-    geom_line(data = plot_df %>% filter(type == "fit"), aes(y = fitted_mean), color = "goldenrod", linewidth = 0.7) +
-    geom_point(data = plot_df %>% filter(type == "fit"), aes(y = fitted_mean), color = "goldenrod", size = 1.6) +
-    geom_point(data = plot_df %>% filter(type == "projection"), aes(y = fitted_mean), color = "dodgerblue", size = 1.8, shape = 17) +
+    geom_line(data = plot_df %>% filter(type == "fit"), aes(y = fitted_mean), color = "gold3", linewidth = 0.7) +
+    geom_point(data = plot_df %>% filter(type == "fit"), aes(y = fitted_mean), color = "gold3", size = 1.6) +
+    geom_point(data = plot_df %>% filter(type == "projection"), aes(y = fitted_mean), color = "steelblue3", size = 1.8, shape = 17) +
     geom_point(aes(y = observed), color = "black", size = 1.4, na.rm = TRUE) +
     facet_wrap(~ PlayerName, scales = "fixed") +
     theme_minimal(base_size = 10) +
     scale_x_continuous(breaks = 2018:2026) +
-    scale_color_manual(values = c(fit = "goldenrod", projection = "dodgerblue")) +
+    scale_color_manual(values = c(fit = "gold3", projection = "steelblue3")) +
     labs(
       title = paste0(display_label, ": observed (black), fitted (gold), 2026 projection (blue)"),
       y = display_label,

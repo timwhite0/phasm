@@ -132,7 +132,7 @@ plot_role <- function(role_name) {
 
   p <- ggplot(plot_df, aes(x = PlayerName_plot, y = mean)) +
     geom_linerange(aes(ymin = p05, ymax = p95), color = "gray45", linewidth = 0.6) +
-    geom_point(color = "dodgerblue", size = 1.6) +
+    geom_point(color = "steelblue3", size = 1.6) +
     coord_flip() +
     facet_wrap(~ metric_label, scales = "free") +
     scale_x_discrete(labels = function(x) str_replace(x, "___.*", ""), drop = TRUE) +

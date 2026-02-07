@@ -143,6 +143,9 @@ ui <- dashboardPage(
       .skin-blue .main-header .logo:hover {
         background-color: #667078 !important;
       }
+      .skin-blue .main-header .logo {
+        font-weight: 700 !important;
+      }
       .plot-controls .form-group {
         margin-bottom: 0;
       }
