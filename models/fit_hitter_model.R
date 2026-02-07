@@ -13,10 +13,10 @@ message(sprintf("detectCores=%d, mc.cores=%d", cores, getOption("mc.cores")))
 
 # Config
 input_path <- Sys.getenv("BATTER_INPUT_PATH", "data/fangraphs_batters_2018_2025.csv")
-stan_path <- Sys.getenv("BATTER_STAN_PATH", "models/model.stan")
+stan_path <- Sys.getenv("BATTER_STAN_PATH", "models/hitter_model.stan")
 output_projection_path <- Sys.getenv("BATTER_OUTPUT_PROJECTION_PATH", "results/projections/batters/category_projections_2026.csv")
-output_fit_path <- Sys.getenv("BATTER_OUTPUT_FIT_PATH", "models/model_fit.rds")
-output_prep_path <- Sys.getenv("BATTER_OUTPUT_PREP_PATH", "models/model_inputs.rds")
+output_fit_path <- Sys.getenv("BATTER_OUTPUT_FIT_PATH", "models/hitter_model_fit.rds")
+output_prep_path <- Sys.getenv("BATTER_OUTPUT_PREP_PATH", "models/hitter_model_inputs.rds")
 batter_eb_summary_path <- Sys.getenv("BATTER_EB_SUMMARY_PATH", "results/prior_predictive/batter_prior_summary.csv")
 
 run_fit <- TRUE

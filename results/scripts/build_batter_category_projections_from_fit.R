@@ -4,8 +4,8 @@ suppressPackageStartupMessages({
   library(rstan)
 })
 
-fit_path <- "models/model_fit.rds"
-prep_path <- "models/model_inputs.rds"
+fit_path <- "models/hitter_model_fit.rds"
+prep_path <- "models/hitter_model_inputs.rds"
 input_path <- "data/fangraphs_batters_2018_2025.csv"
 output_projection_path <- "results/projections/batters/category_projections_2026.csv"
 atc_pa_path <- "data/atc_pa_projections_2026.csv"

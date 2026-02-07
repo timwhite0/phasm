@@ -19,8 +19,11 @@ vals <- proj %>%
   mutate(playerid = as.character(playerid)) %>%
   left_join(
     atc %>% transmute(playerid = as.character(PlayerId), PA_atc = as.numeric(PA)),
-    by = "playerid"
+    by = "playerid",
+    suffix = c("", "_atc")
   ) %>%
+  mutate(PA_atc = coalesce(PA_atc, PA_atc_atc)) %>%
+  select(-any_of("PA_atc_atc")) %>%
   filter(!is.na(PA_atc)) %>%
   transmute(
     playerid,

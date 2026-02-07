@@ -12,7 +12,7 @@ message(sprintf("detectCores=%d, mc.cores=%d", cores, getOption("mc.cores")))
 
 # Config
 input_path <- "data/fangraphs_batters_2013_2017.csv"
-stan_path <- "models/model.stan"
+stan_path <- "models/hitter_model.stan"
 output_fit_path <- "models/batter_eb_2013_2017_fit.rds"
 output_summary_path <- "results/prior_predictive/batter_prior_summary.csv"
 

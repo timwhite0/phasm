@@ -136,6 +136,13 @@ ui <- dashboardPage(
   ),
   dashboardBody(
     tags$head(tags$style(HTML("
+      .skin-blue .main-header .navbar,
+      .skin-blue .main-header .logo {
+        background-color: #667078 !important;
+      }
+      .skin-blue .main-header .logo:hover {
+        background-color: #667078 !important;
+      }
       .plot-controls .form-group {
         margin-bottom: 0;
       }
@@ -308,16 +315,15 @@ server <- function(input, output, session) {
       tags$ul(
         tags$li("Reliever outcomes include SO, BB, H, ER, W, and SVHLD."),
         tags$li("role_leverage is a binary covariate that captures high-leverage usage."),
-        tags$li("RP priors default to empirical-Bayes summaries from results/prior_predictive/rp_prior_summary.csv."),
-        tags$li("If the EB summary is missing or invalid, RP fitting falls back to the legacy priors.")
+        tags$li("RP priors default to empirical-Bayes summaries from results/prior_predictive/rp_prior_summary.csv.")
       ),
       tags$div(style = "height: 12px;"),
-      tags$h4(tags$strong("RP empirical-Bayes prior flow")),
+      tags$h4(tags$strong("Empirical-Bayes prior flow (all models)")),
       tags$ul(
-        tags$li("EB summary is fit on 2013-2017 reliever data with the same RP filtering logic."),
-        tags$li("Estimated hyperparameters include beta, sigma_player, sigma_year, rho_year, and beta_role_svhld."),
-        tags$li("Main RP fit uses EB posterior means as prior centers and EB posterior sds as prior scales."),
-        tags$li("Sigma hyperparameters are converted to half-normal prior scales before RP fitting."),
+        tags$li("EB summaries are fit on 2013-2017 data for hitters, starters, and relievers."),
+        tags$li("Default summary files are batter_prior_summary.csv, sp_prior_summary.csv, and rp_prior_summary.csv in results/prior_predictive/."),
+        tags$li("Main fits use EB posterior means as prior centers and EB posterior sds as prior scales."),
+        tags$li("If an EB summary is missing or invalid, that model falls back to legacy priors with a log message."),
         tags$li("Full details and file paths are in the GitHub README.")
       ),
       tags$div(style = "height: 12px;"),
@@ -500,25 +506,29 @@ render_plot_image <- function(file, subdir) {
     } else if (all(c("Name", "Composite z-score") %in% names(df))) {
       df <- df %>% select(Name, `Composite z-score`, everything())
     }
-    score_cols <- names(df)[grepl("z-score$", names(df))]
-    if (length(score_cols) > 0) {
-      df[score_cols] <- lapply(df[score_cols], function(x) round(as.numeric(x), 2))
+    if ("Composite z-score" %in% names(df)) {
+      df <- df %>% mutate(.comp_raw = as.numeric(`Composite z-score`))
     }
+    score_cols <- names(df)[grepl("z-score$", names(df))]
     if (!is.null(input$hitter_position) &&
         input$hitter_position != "All" &&
         "Position" %in% names(df)) {
       df <- df %>% filter(Position == input$hitter_position)
     }
-    if ("Composite z-score" %in% names(df)) {
-      df <- df %>% mutate(Rank = dense_rank(desc(`Composite z-score`)))
-      df <- df %>% select(Rank, everything())
+    if ("Composite z-score" %in% names(df) && ".comp_raw" %in% names(df)) {
+      df <- df %>% mutate(Rank = dense_rank(desc(.comp_raw)))
+      df <- df %>% select(Rank, everything(), - .comp_raw)
     }
     default_order <- if ("Composite z-score" %in% names(df)) {
       list(list(which(names(df) == "Composite z-score") - 1L, "desc"))
     } else {
       list()
     }
-    datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
+    dt <- datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
+    if (length(score_cols) > 0) {
+      dt <- formatRound(dt, columns = score_cols, digits = 2)
+    }
+    dt
   })
 
   output$sp_table <- renderDT({
@@ -542,20 +552,24 @@ render_plot_image <- function(file, subdir) {
     if (all(c("Name", "Composite z-score") %in% names(df))) {
       df <- df %>% select(Name, `Composite z-score`, everything())
     }
-    score_cols <- names(df)[grepl("z-score$", names(df))]
-    if (length(score_cols) > 0) {
-      df[score_cols] <- lapply(df[score_cols], function(x) round(as.numeric(x), 2))
-    }
     if ("Composite z-score" %in% names(df)) {
-      df <- df %>% mutate(Rank = dense_rank(desc(`Composite z-score`)))
-      df <- df %>% select(Rank, everything())
+      df <- df %>% mutate(.comp_raw = as.numeric(`Composite z-score`))
+    }
+    score_cols <- names(df)[grepl("z-score$", names(df))]
+    if ("Composite z-score" %in% names(df) && ".comp_raw" %in% names(df)) {
+      df <- df %>% mutate(Rank = dense_rank(desc(.comp_raw)))
+      df <- df %>% select(Rank, everything(), - .comp_raw)
     }
     default_order <- if ("Composite z-score" %in% names(df)) {
       list(list(which(names(df) == "Composite z-score") - 1L, "desc"))
     } else {
       list()
     }
-    datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
+    dt <- datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
+    if (length(score_cols) > 0) {
+      dt <- formatRound(dt, columns = score_cols, digits = 2)
+    }
+    dt
   })
 
   output$rp_table <- renderDT({
@@ -579,20 +593,24 @@ render_plot_image <- function(file, subdir) {
     if (all(c("Name", "Composite z-score") %in% names(df))) {
       df <- df %>% select(Name, `Composite z-score`, everything())
     }
-    score_cols <- names(df)[grepl("z-score$", names(df))]
-    if (length(score_cols) > 0) {
-      df[score_cols] <- lapply(df[score_cols], function(x) round(as.numeric(x), 2))
-    }
     if ("Composite z-score" %in% names(df)) {
-      df <- df %>% mutate(Rank = dense_rank(desc(`Composite z-score`)))
-      df <- df %>% select(Rank, everything())
+      df <- df %>% mutate(.comp_raw = as.numeric(`Composite z-score`))
+    }
+    score_cols <- names(df)[grepl("z-score$", names(df))]
+    if ("Composite z-score" %in% names(df) && ".comp_raw" %in% names(df)) {
+      df <- df %>% mutate(Rank = dense_rank(desc(.comp_raw)))
+      df <- df %>% select(Rank, everything(), - .comp_raw)
     }
     default_order <- if ("Composite z-score" %in% names(df)) {
       list(list(which(names(df) == "Composite z-score") - 1L, "desc"))
     } else {
       list()
     }
-    datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
+    dt <- datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
+    if (length(score_cols) > 0) {
+      dt <- formatRound(dt, columns = score_cols, digits = 2)
+    }
+    dt
   })
 
   output$hitter_proj_table <- renderDT({

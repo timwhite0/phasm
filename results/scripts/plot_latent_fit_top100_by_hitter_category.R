@@ -4,8 +4,8 @@ suppressPackageStartupMessages({
   library(ggplot2)
 })
 
-fit_path <- 'models/model_fit.rds'
-prep_path <- 'models/model_inputs.rds'
+fit_path <- 'models/hitter_model_fit.rds'
+prep_path <- 'models/hitter_model_inputs.rds'
 input_path <- 'data/fangraphs_batters_2018_2025.csv'
 results_dir <- 'results/plots/fitted_outcome_curves/batters'
 

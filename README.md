@@ -19,8 +19,8 @@ stored as totals using ATC PA/IP (e.g., H_mean_t, Ks_mean, W_mean_t, SVHLD_mean_
 - Year random intercepts with AR(1) evolution.
 
 ## Files
-- Hitter Stan model: `models/model.stan`
-- Hitter R driver: `models/fit_model.R`
+- Hitter Stan model: `models/hitter_model.stan`
+- Hitter R driver: `models/fit_hitter_model.R`
 - SP Stan model: `models/sp_model.stan`
 - SP R driver: `models/fit_sp_model.R`
 - RP Stan model: `models/rp_model.stan`
@@ -28,8 +28,8 @@ stored as totals using ATC PA/IP (e.g., H_mean_t, Ks_mean, W_mean_t, SVHLD_mean_
 - Hitter inputs: `data/fangraphs_batters_2018_2025.csv`
 - Pitcher inputs: `data/fangraphs_pitchers_2018_2025.csv`
 - Hitter outputs (after fitting):
-  - `models/model_fit.rds`
-  - `models/model_inputs.rds`
+  - `models/hitter_model_fit.rds`
+  - `models/hitter_model_inputs.rds`
   - `results/projections/batters/category_projections_2026.csv`
 - Hitter projection refresh (no refit):
   - `results/scripts/build_batter_category_projections_from_fit.R`
@@ -74,19 +74,19 @@ stored as totals using ATC PA/IP (e.g., H_mean_t, Ks_mean, W_mean_t, SVHLD_mean_
 - RP priors default to empirical-Bayes summaries loaded from `results/prior_predictive/rp_prior_summary.csv`.
 - If that summary file is missing or invalid, RP fitting falls back to legacy priors (including the tighter SVHLD-specific priors).
 
-### RP empirical-Bayes priors
-- EB summary generation script: `results/scripts/fit_rp_eb_2013_2017.R`.
-- EB training data: `data/fangraphs_pitchers_2013_2017.csv`, filtered to relievers with the same RP fit rules (RP-only role filter, projected starters removed via ATC GS >= 1).
-- EB output: `results/prior_predictive/rp_prior_summary.csv`.
-- The EB summary stores posterior mean/sd/quantiles for:
-  - `beta` (fixed effects by predictor and outcome),
-  - `sigma_player` (player random-effect scales by outcome),
-  - `sigma_year` (year-effect innovation scales by outcome),
-  - `rho_year` (AR(1) year correlation by outcome),
-  - `beta_role_svhld` (SVHLD leverage coefficient).
-- Main RP fit (`models/fit_rp_model.R`) uses EB posterior means as prior centers and EB posterior sds as prior scales (with small lower bounds for numerical stability), then passes those into Stan via data.
-- For half-normal scale priors (`sigma_player`, `sigma_year`), the script converts EB posterior mean sigma to a half-normal scale parameter before fitting.
-- If EB summary extraction fails or required rows are missing, the RP fit logs a fallback message and reverts to legacy priors.
+### Empirical-Bayes priors (all models)
+- EB summaries are fit on 2013-2017 data and used as defaults for all main model fits (hitters, SP, RP).
+- EB summary generation scripts:
+  - Hitters: `results/scripts/fit_batter_eb_2013_2017.R` -> `results/prior_predictive/batter_prior_summary.csv`
+  - SP: `results/scripts/fit_sp_eb_2013_2017.R` -> `results/prior_predictive/sp_prior_summary.csv`
+  - RP: `results/scripts/fit_rp_eb_2013_2017.R` -> `results/prior_predictive/rp_prior_summary.csv`
+- EB training data:
+  - Hitters: `data/fangraphs_batters_2013_2017.csv`
+  - Pitchers: `data/fangraphs_pitchers_2013_2017.csv` with model-specific SP/RP filters matching each main fit.
+- EB summaries store posterior mean/sd/quantiles for prior hyperparameters used by the corresponding main model.
+- Main fit scripts (`models/fit_hitter_model.R`, `models/fit_sp_model.R`, `models/fit_rp_model.R`) use EB posterior means as prior centers and EB posterior sds as prior scales (with small lower bounds for numerical stability), then pass those values into Stan via data.
+- For half-normal scale priors (for example `sigma_player`, `sigma_year`), fit scripts convert EB posterior mean sigma to half-normal scale parameters.
+- If an EB summary is missing or invalid, the corresponding fit script logs a fallback message and reverts to legacy priors.
 
 ## Model specification
 The sections below describe the hitter model. The pitcher models use the same backbone but
@@ -179,7 +179,7 @@ $$
 - Draw $\gamma_{k,Y+1} \sim \mathcal{N}(\rho_k\gamma_{k,Y}, \sigma_{\text{year},k})$
 - Predict $\eta_{n,k}$ for 2026 using age and age$^2$ (with age incremented by +1 from the most recent season), plus the drawn 2026 year effect
 
-### Priors (hitter/SP baseline)
+### Priors
 - Fixed effects (standardized predictors): $\beta_k \sim \mathcal{N}(0, 2.5^2)$
 - Random effect scales (half-normal): $\sigma^{\text{player}}_r, \sigma^{\text{pos}}_r \sim \mathcal{N}^+(0, 1)$
 - Non-centered random effects: $z^{\text{player}}_r, z^{\text{pos}}_r \sim \mathcal{N}(0, 2.5^2)$
@@ -187,4 +187,4 @@ $$
 - Year AR(1) parameters: $\rho_k \sim \mathcal{N}(0, 0.5)$, $\sigma_{\text{year},k} \sim \mathcal{N}^+(0, 1)$
 - Continuous outcome noise: $\sigma_k \sim \mathcal{N}^+(0, 1)$
 
-For RP, these baseline priors are replaced by EB-informed priors when `results/prior_predictive/rp_prior_summary.csv` is available.
+In production fits, each model (hitters/SP/RP) defaults to EB-informed priors from its 2013-2017 summary file. The distributions above are the legacy fallback priors used if EB summaries are unavailable or invalid.
