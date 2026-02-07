@@ -32,7 +32,9 @@ atc <- atc %>%
   filter(!is.na(playerid), !is.na(IP_atc))
 
 proj <- proj %>%
-  left_join(atc, by = "playerid") %>%
+  left_join(atc, by = "playerid", suffix = c("", "_atc")) %>%
+  mutate(IP_atc = coalesce(IP_atc, IP_atc_atc)) %>%
+  select(-any_of("IP_atc_atc")) %>%
   filter(!is.na(IP_atc))
 
 proj <- proj %>%

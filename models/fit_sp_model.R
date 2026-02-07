@@ -12,11 +12,12 @@ options(mc.cores = cores)
 message(sprintf("detectCores=%d, mc.cores=%d", cores, getOption("mc.cores")))
 
 # Config
-input_path <- "data/fangraphs_pitchers_2018_2025.csv"
-stan_path <- "models/sp_model.stan"
-output_projection_path <- "results/projections/pitchers/sp_category_projections_2026.csv"
-output_fit_path <- "models/sp_model_fit.rds"
-output_prep_path <- "models/sp_model_inputs.rds"
+input_path <- Sys.getenv("SP_INPUT_PATH", "data/fangraphs_pitchers_2018_2025.csv")
+stan_path <- Sys.getenv("SP_STAN_PATH", "models/sp_model.stan")
+output_projection_path <- Sys.getenv("SP_OUTPUT_PROJECTION_PATH", "results/projections/pitchers/sp_category_projections_2026.csv")
+output_fit_path <- Sys.getenv("SP_OUTPUT_FIT_PATH", "models/sp_model_fit.rds")
+output_prep_path <- Sys.getenv("SP_OUTPUT_PREP_PATH", "models/sp_model_inputs.rds")
+sp_eb_summary_path <- Sys.getenv("SP_EB_SUMMARY_PATH", "results/prior_predictive/sp_prior_summary.csv")
 
 run_fit <- TRUE
 chains <- as.integer(Sys.getenv("STAN_CHAINS", "4"))
@@ -75,6 +76,81 @@ Z_player <- cbind(
   intercept = 1,
   age_c = raw$age_c
 )
+
+# Prior settings (defaults)
+beta_mean <- matrix(0, nrow = ncol(X), ncol = length(count_outcomes))
+beta_sd <- matrix(2.5, nrow = ncol(X), ncol = length(count_outcomes))
+sigma_player_sd <- rep(1, length(count_outcomes))
+sigma_year_sd <- rep(1, length(count_outcomes))
+rho_year_mean <- rep(0, length(count_outcomes))
+rho_year_sd <- rep(0.5, length(count_outcomes))
+
+if (!file.exists(sp_eb_summary_path)) {
+  message("EB summary file not found; falling back to old SP priors: ", sp_eb_summary_path)
+} else {
+  eb_ok <- TRUE
+  eb_err <- NULL
+  tryCatch({
+    eb <- read_csv(sp_eb_summary_path, show_col_types = FALSE)
+    outcome_order <- count_outcomes
+    beta_rows <- colnames(X)
+
+    beta_eb <- eb %>%
+      filter(param == "beta") %>%
+      mutate(
+        dim1 = factor(dim1, levels = beta_rows),
+        dim2 = factor(dim2, levels = outcome_order)
+      ) %>%
+      arrange(dim1, dim2)
+    if (nrow(beta_eb) != length(beta_rows) * length(outcome_order)) {
+      stop("missing beta rows")
+    }
+    beta_mean <- matrix(beta_eb$mean, nrow = length(beta_rows), byrow = TRUE)
+    beta_sd <- matrix(pmax(beta_eb$sd, 0.01), nrow = length(beta_rows), byrow = TRUE)
+
+    # Convert posterior mean sigma to equivalent half-normal scale parameter.
+    hn_scale <- sqrt(pi / 2)
+
+    sigma_player_eb <- eb %>%
+      filter(param == "sigma_player") %>%
+      group_by(dim2) %>%
+      summarize(mean = mean(mean, na.rm = TRUE), .groups = "drop") %>%
+      mutate(dim2 = factor(dim2, levels = outcome_order)) %>%
+      arrange(dim2)
+    if (nrow(sigma_player_eb) != length(outcome_order)) {
+      stop("missing sigma_player rows")
+    }
+    sigma_player_sd <- pmax(sigma_player_eb$mean * hn_scale, 0.01)
+
+    sigma_year_eb <- eb %>%
+      filter(param == "sigma_year") %>%
+      mutate(dim1 = factor(dim1, levels = outcome_order)) %>%
+      arrange(dim1)
+    if (nrow(sigma_year_eb) != length(outcome_order)) {
+      stop("missing sigma_year rows")
+    }
+    sigma_year_sd <- pmax(sigma_year_eb$mean * hn_scale, 0.01)
+
+    rho_year_eb <- eb %>%
+      filter(param == "rho_year") %>%
+      mutate(dim1 = factor(dim1, levels = outcome_order)) %>%
+      arrange(dim1)
+    if (nrow(rho_year_eb) != length(outcome_order)) {
+      stop("missing rho_year rows")
+    }
+    rho_year_mean <- rho_year_eb$mean
+    rho_year_sd <- pmax(rho_year_eb$sd, 0.05)
+  }, error = function(e) {
+    eb_ok <<- FALSE
+    eb_err <<- conditionMessage(e)
+  })
+
+  if (eb_ok) {
+    message("Using EB priors from: ", sp_eb_summary_path)
+  } else {
+    message("EB summary is invalid; falling back to old SP priors: ", sp_eb_summary_path, " (", eb_err, ")")
+  }
+}
 
 # Outcomes
 count_mat <- raw %>%
@@ -137,6 +213,13 @@ stan_data <- list(
   Z_player = Z_player,
   K_zip = length(zip_outcomes),
   zip_idx = match(zip_outcomes, count_outcomes),
+  beta_mean = beta_mean,
+  beta_sd = beta_sd,
+  sigma_player_sd = sigma_player_sd,
+  sigma_year_sd = sigma_year_sd,
+  beta_zip_sd = rep(1.0, length(zip_outcomes)),
+  rho_year_mean = rho_year_mean,
+  rho_year_sd = rho_year_sd,
   J_player = length(unique(raw$player_id)),
   J_year = length(years),
   player_id = raw$player_id,

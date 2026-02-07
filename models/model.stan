@@ -9,6 +9,14 @@ data {
   matrix[N, P] X;
   matrix[N, R] Z;
   matrix[N, R_player] Z_player;
+  matrix[P, K] beta_mean;
+  matrix[P, K] beta_sd;
+  vector<lower=0>[K] sigma_player_sd;
+  vector<lower=0>[K] sigma_pos_sd;
+  vector<lower=0>[K] sigma_year_sd;
+  vector[K] rho_year_mean;
+  vector<lower=0>[K] rho_year_sd;
+  vector<lower=0>[K_cont] sigma_cont_sd;
 
   int<lower=1> J_player;
   int<lower=1> J_pos;
@@ -67,25 +75,29 @@ transformed parameters {
 
 model {
   // Priors
-  to_vector(beta) ~ normal(0, 2.5);
+  for (k in 1:K) {
+    for (p in 1:P) {
+      beta[p, k] ~ normal(beta_mean[p, k], beta_sd[p, k]);
+    }
+  }
 
   for (r in 1:R_player) {
     to_vector(z_player[r]) ~ normal(0, 2.5);
-    sigma_player[r] ~ normal(0, 1);
+    sigma_player[r] ~ normal(0, sigma_player_sd);
     L_player[r] ~ lkj_corr_cholesky(2);
   }
 
   for (r in 1:R) {
     to_vector(z_pos[r]) ~ normal(0, 2.5);
 
-    sigma_pos[r] ~ normal(0, 1);
+    sigma_pos[r] ~ normal(0, sigma_pos_sd);
 
     L_pos[r] ~ lkj_corr_cholesky(2);
   }
 
-  rho_year ~ normal(0, 0.5);
-  sigma_year ~ normal(0, 1);
-  sigma_cont ~ normal(0, 1);
+  rho_year ~ normal(rho_year_mean, rho_year_sd);
+  sigma_year ~ normal(0, sigma_year_sd);
+  sigma_cont ~ normal(0, sigma_cont_sd);
 
   // AR(1) year effects
   for (k in 1:K) {

@@ -307,7 +307,18 @@ server <- function(input, output, session) {
       tags$h4(tags$strong("RP model notes")),
       tags$ul(
         tags$li("Reliever outcomes include SO, BB, H, ER, W, and SVHLD."),
-        tags$li("role_leverage is a binary covariate that captures high-leverage usage.")
+        tags$li("role_leverage is a binary covariate that captures high-leverage usage."),
+        tags$li("RP priors default to empirical-Bayes summaries from results/prior_predictive/rp_prior_summary.csv."),
+        tags$li("If the EB summary is missing or invalid, RP fitting falls back to the legacy priors.")
+      ),
+      tags$div(style = "height: 12px;"),
+      tags$h4(tags$strong("RP empirical-Bayes prior flow")),
+      tags$ul(
+        tags$li("EB summary is fit on 2013-2017 reliever data with the same RP filtering logic."),
+        tags$li("Estimated hyperparameters include beta, sigma_player, sigma_year, rho_year, and beta_role_svhld."),
+        tags$li("Main RP fit uses EB posterior means as prior centers and EB posterior sds as prior scales."),
+        tags$li("Sigma hyperparameters are converted to half-normal prior scales before RP fitting."),
+        tags$li("Full details and file paths are in the GitHub README.")
       ),
       tags$div(style = "height: 12px;"),
       tags$p(

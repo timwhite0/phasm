@@ -4,9 +4,10 @@ suppressPackageStartupMessages({
   library(baseballr)
 })
 
-start_season <- 2018
-end_season <- 2025
-output_path <- "data/fangraphs_pitchers_2018_2025.csv"
+start_season <- as.integer(Sys.getenv("FG_START_SEASON", "2018"))
+end_season <- as.integer(Sys.getenv("FG_END_SEASON", "2025"))
+output_path <- Sys.getenv("FG_OUTPUT_PATH", "data/fangraphs_pitchers_2018_2025.csv")
+require_recent <- as.integer(Sys.getenv("FG_REQUIRE_RECENT", "1"))
 
 convert_ip <- function(ip_raw) {
   ip_num <- suppressWarnings(as.numeric(ip_raw))
@@ -127,21 +128,23 @@ fg <- fg %>%
 # Keep seasons with IP >= 20
 fg <- fg %>% filter(IP >= 20)
 
-# Keep pitchers with >=20 IP in either 2024 or 2025
-keep_recent <- fg %>%
-  group_by(playerid) %>%
-  summarize(
-    IP_2425_max = ifelse(
-      any(Season %in% c(2024, 2025)),
-      max(IP[Season %in% c(2024, 2025)], na.rm = TRUE),
-      0
-    ),
-    .groups = "drop"
-  ) %>%
-  filter(IP_2425_max >= 20) %>%
-  pull(playerid)
+if (!is.na(require_recent) && require_recent == 1) {
+  # Keep pitchers with >=20 IP in either 2024 or 2025
+  keep_recent <- fg %>%
+    group_by(playerid) %>%
+    summarize(
+      IP_2425_max = ifelse(
+        any(Season %in% c(2024, 2025)),
+        max(IP[Season %in% c(2024, 2025)], na.rm = TRUE),
+        0
+      ),
+      .groups = "drop"
+    ) %>%
+    filter(IP_2425_max >= 20) %>%
+    pull(playerid)
 
-fg <- fg %>% filter(playerid %in% keep_recent)
+  fg <- fg %>% filter(playerid %in% keep_recent)
+}
 
 out <- fg %>% select(
   Season, PlayerName, playerid, Age, Role, Team, IP, G, GS,

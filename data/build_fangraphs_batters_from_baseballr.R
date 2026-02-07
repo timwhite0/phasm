@@ -4,9 +4,10 @@ suppressPackageStartupMessages({
   library(baseballr)
 })
 
-start_season <- 2018
-end_season <- 2025
-output_path <- "data/fangraphs_batters_2018_2025.csv"
+start_season <- as.integer(Sys.getenv("FG_START_SEASON", "2018"))
+end_season <- as.integer(Sys.getenv("FG_END_SEASON", "2025"))
+output_path <- Sys.getenv("FG_OUTPUT_PATH", "data/fangraphs_batters_2018_2025.csv")
+require_recent <- as.integer(Sys.getenv("FG_REQUIRE_RECENT", "1"))
 
 fg <- lapply(seq(start_season, end_season), function(season) {
   message(sprintf("Fetching FanGraphs batting leaders for %d", season))
@@ -60,21 +61,23 @@ fg <- fg %>%
 # Keep seasons with PA >= 100
 fg <- fg %>% filter(PA >= 100)
 
-# Keep players with >=100 PA in either 2024 or 2025
-keep_recent <- fg %>%
-  group_by(playerid) %>%
-  summarize(
-    PA_2425_max = ifelse(
-      any(Season %in% c(2024, 2025)),
-      max(PA[Season %in% c(2024, 2025)], na.rm = TRUE),
-      0
-    ),
-    .groups = "drop"
-  ) %>%
-  filter(PA_2425_max >= 100) %>%
-  pull(playerid)
+if (!is.na(require_recent) && require_recent == 1) {
+  # Keep hitters with >=100 PA in either 2024 or 2025
+  keep_recent <- fg %>%
+    group_by(playerid) %>%
+    summarize(
+      PA_2425_max = ifelse(
+        any(Season %in% c(2024, 2025)),
+        max(PA[Season %in% c(2024, 2025)], na.rm = TRUE),
+        0
+      ),
+      .groups = "drop"
+    ) %>%
+    filter(PA_2425_max >= 100) %>%
+    pull(playerid)
 
-fg <- fg %>% filter(playerid %in% keep_recent)
+  fg <- fg %>% filter(playerid %in% keep_recent)
+}
 
 out <- fg %>% select(all_of(needed_cols))
 

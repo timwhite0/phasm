@@ -15,6 +15,10 @@ data {
   vector<lower=0>[K] sigma_player_sd;
   vector<lower=0>[K] sigma_year_sd;
   vector<lower=0>[K_zip] beta_zip_sd;
+  vector[K] rho_year_mean;
+  vector<lower=0>[K] rho_year_sd;
+  real beta_role_svhld_mean;
+  real<lower=0> beta_role_svhld_sd;
 
   int<lower=1> J_player;
   int<lower=1> J_year;
@@ -75,9 +79,9 @@ model {
     L_player[r] ~ lkj_corr_cholesky(2);
   }
 
-  rho_year ~ normal(0, 0.5);
+  rho_year ~ normal(rho_year_mean, rho_year_sd);
   sigma_year ~ normal(0, sigma_year_sd);
-  beta_role_svhld ~ normal(0, 1);
+  beta_role_svhld ~ normal(beta_role_svhld_mean, beta_role_svhld_sd);
 
   // AR(1) year effects
   for (k in 1:K) {

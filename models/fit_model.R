@@ -12,11 +12,12 @@ options(mc.cores = cores)
 message(sprintf("detectCores=%d, mc.cores=%d", cores, getOption("mc.cores")))
 
 # Config
-input_path <- "data/fangraphs_batters_2018_2025.csv"
-stan_path <- "models/model.stan"
-output_projection_path <- "results/projections/batters/category_projections_2026.csv"
-output_fit_path <- "models/model_fit.rds"
-output_prep_path <- "models/model_inputs.rds"
+input_path <- Sys.getenv("BATTER_INPUT_PATH", "data/fangraphs_batters_2018_2025.csv")
+stan_path <- Sys.getenv("BATTER_STAN_PATH", "models/model.stan")
+output_projection_path <- Sys.getenv("BATTER_OUTPUT_PROJECTION_PATH", "results/projections/batters/category_projections_2026.csv")
+output_fit_path <- Sys.getenv("BATTER_OUTPUT_FIT_PATH", "models/model_fit.rds")
+output_prep_path <- Sys.getenv("BATTER_OUTPUT_PREP_PATH", "models/model_inputs.rds")
+batter_eb_summary_path <- Sys.getenv("BATTER_EB_SUMMARY_PATH", "results/prior_predictive/batter_prior_summary.csv")
 
 run_fit <- TRUE
 chains <- as.integer(Sys.getenv("STAN_CHAINS", "4"))
@@ -85,6 +86,104 @@ Z_player <- cbind(
   intercept = 1,
   age_c = raw$age_c
 )
+
+# Prior settings (defaults)
+all_outcomes <- c(count_outcomes, cont_outcomes)
+beta_mean <- matrix(0, nrow = ncol(X), ncol = length(all_outcomes))
+beta_sd <- matrix(2.5, nrow = ncol(X), ncol = length(all_outcomes))
+sigma_player_sd <- rep(1, length(all_outcomes))
+sigma_pos_sd <- rep(1, length(all_outcomes))
+sigma_year_sd <- rep(1, length(all_outcomes))
+rho_year_mean <- rep(0, length(all_outcomes))
+rho_year_sd <- rep(0.5, length(all_outcomes))
+sigma_cont_sd <- rep(1, length(cont_outcomes))
+
+if (!file.exists(batter_eb_summary_path)) {
+  message("EB summary file not found; falling back to old batter priors: ", batter_eb_summary_path)
+} else {
+  eb_ok <- TRUE
+  eb_err <- NULL
+  tryCatch({
+    eb <- read_csv(batter_eb_summary_path, show_col_types = FALSE)
+    outcome_order <- all_outcomes
+    beta_rows <- colnames(X)
+
+    beta_eb <- eb %>%
+      filter(param == "beta") %>%
+      mutate(
+        dim1 = factor(dim1, levels = beta_rows),
+        dim2 = factor(dim2, levels = outcome_order)
+      ) %>%
+      arrange(dim1, dim2)
+    if (nrow(beta_eb) != length(beta_rows) * length(outcome_order)) {
+      stop("missing beta rows")
+    }
+    beta_mean <- matrix(beta_eb$mean, nrow = length(beta_rows), byrow = TRUE)
+    beta_sd <- matrix(pmax(beta_eb$sd, 0.01), nrow = length(beta_rows), byrow = TRUE)
+
+    # Convert posterior mean sigma to equivalent half-normal scale parameter.
+    hn_scale <- sqrt(pi / 2)
+
+    sigma_player_eb <- eb %>%
+      filter(param == "sigma_player") %>%
+      group_by(dim2) %>%
+      summarize(mean = mean(mean, na.rm = TRUE), .groups = "drop") %>%
+      mutate(dim2 = factor(dim2, levels = outcome_order)) %>%
+      arrange(dim2)
+    if (nrow(sigma_player_eb) != length(outcome_order)) {
+      stop("missing sigma_player rows")
+    }
+    sigma_player_sd <- pmax(sigma_player_eb$mean * hn_scale, 0.01)
+
+    sigma_pos_eb <- eb %>%
+      filter(param == "sigma_pos") %>%
+      group_by(dim2) %>%
+      summarize(mean = mean(mean, na.rm = TRUE), .groups = "drop") %>%
+      mutate(dim2 = factor(dim2, levels = outcome_order)) %>%
+      arrange(dim2)
+    if (nrow(sigma_pos_eb) != length(outcome_order)) {
+      stop("missing sigma_pos rows")
+    }
+    sigma_pos_sd <- pmax(sigma_pos_eb$mean * hn_scale, 0.01)
+
+    sigma_year_eb <- eb %>%
+      filter(param == "sigma_year") %>%
+      mutate(dim1 = factor(dim1, levels = outcome_order)) %>%
+      arrange(dim1)
+    if (nrow(sigma_year_eb) != length(outcome_order)) {
+      stop("missing sigma_year rows")
+    }
+    sigma_year_sd <- pmax(sigma_year_eb$mean * hn_scale, 0.01)
+
+    rho_year_eb <- eb %>%
+      filter(param == "rho_year") %>%
+      mutate(dim1 = factor(dim1, levels = outcome_order)) %>%
+      arrange(dim1)
+    if (nrow(rho_year_eb) != length(outcome_order)) {
+      stop("missing rho_year rows")
+    }
+    rho_year_mean <- rho_year_eb$mean
+    rho_year_sd <- pmax(rho_year_eb$sd, 0.05)
+
+    sigma_cont_eb <- eb %>%
+      filter(param == "sigma_cont") %>%
+      mutate(dim1 = factor(dim1, levels = cont_outcomes)) %>%
+      arrange(dim1)
+    if (nrow(sigma_cont_eb) != length(cont_outcomes)) {
+      stop("missing sigma_cont rows")
+    }
+    sigma_cont_sd <- pmax(sigma_cont_eb$mean * hn_scale, 0.01)
+  }, error = function(e) {
+    eb_ok <<- FALSE
+    eb_err <<- conditionMessage(e)
+  })
+
+  if (eb_ok) {
+    message("Using EB priors from: ", batter_eb_summary_path)
+  } else {
+    message("EB summary is invalid; falling back to old batter priors: ", batter_eb_summary_path, " (", eb_err, ")")
+  }
+}
 
 # Outcomes
 count_mat <- raw %>%
@@ -165,6 +264,14 @@ stan_data <- list(
   X = X,
   Z = Z,
   Z_player = Z_player,
+  beta_mean = beta_mean,
+  beta_sd = beta_sd,
+  sigma_player_sd = sigma_player_sd,
+  sigma_pos_sd = sigma_pos_sd,
+  sigma_year_sd = sigma_year_sd,
+  rho_year_mean = rho_year_mean,
+  rho_year_sd = rho_year_sd,
+  sigma_cont_sd = sigma_cont_sd,
   J_player = length(unique(raw$player_id)),
   J_pos = length(unique(raw$pos_id)),
   J_year = length(years),

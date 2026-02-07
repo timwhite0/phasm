@@ -71,6 +71,22 @@ stored as totals using ATC PA/IP (e.g., H_mean_t, Ks_mean, W_mean_t, SVHLD_mean_
 - RP uses a binary `role_leverage` covariate for SVHLD only:
   - Training years: top 3 in SVHLD on each team-season are flagged. For `Team == "2 Tms"`, top 5 are flagged; `3+ Tms` are excluded. Anyone with SVHLD >= 10 or SVHLD/IP >= 0.3 is also flagged.
   - 2026: players listed as Closer/Co-Closer/Closer Committee/Setup Man on the Fangraphs closer depth chart are flagged and cached to `data/closer_depth_chart_2026.csv`.
+- RP priors default to empirical-Bayes summaries loaded from `results/prior_predictive/rp_prior_summary.csv`.
+- If that summary file is missing or invalid, RP fitting falls back to legacy priors (including the tighter SVHLD-specific priors).
+
+### RP empirical-Bayes priors
+- EB summary generation script: `results/scripts/fit_rp_eb_2013_2017.R`.
+- EB training data: `data/fangraphs_pitchers_2013_2017.csv`, filtered to relievers with the same RP fit rules (RP-only role filter, projected starters removed via ATC GS >= 1).
+- EB output: `results/prior_predictive/rp_prior_summary.csv`.
+- The EB summary stores posterior mean/sd/quantiles for:
+  - `beta` (fixed effects by predictor and outcome),
+  - `sigma_player` (player random-effect scales by outcome),
+  - `sigma_year` (year-effect innovation scales by outcome),
+  - `rho_year` (AR(1) year correlation by outcome),
+  - `beta_role_svhld` (SVHLD leverage coefficient).
+- Main RP fit (`models/fit_rp_model.R`) uses EB posterior means as prior centers and EB posterior sds as prior scales (with small lower bounds for numerical stability), then passes those into Stan via data.
+- For half-normal scale priors (`sigma_player`, `sigma_year`), the script converts EB posterior mean sigma to a half-normal scale parameter before fitting.
+- If EB summary extraction fails or required rows are missing, the RP fit logs a fallback message and reverts to legacy priors.
 
 ## Model specification
 The sections below describe the hitter model. The pitcher models use the same backbone but
@@ -163,10 +179,12 @@ $$
 - Draw $\gamma_{k,Y+1} \sim \mathcal{N}(\rho_k\gamma_{k,Y}, \sigma_{\text{year},k})$
 - Predict $\eta_{n,k}$ for 2026 using age and age$^2$ (with age incremented by +1 from the most recent season), plus the drawn 2026 year effect
 
-### Priors (aligned with Stan prior recommendations)
+### Priors (hitter/SP baseline)
 - Fixed effects (standardized predictors): $\beta_k \sim \mathcal{N}(0, 2.5^2)$
 - Random effect scales (half-normal): $\sigma^{\text{player}}_r, \sigma^{\text{pos}}_r \sim \mathcal{N}^+(0, 1)$
 - Non-centered random effects: $z^{\text{player}}_r, z^{\text{pos}}_r \sim \mathcal{N}(0, 2.5^2)$
 - Correlations: $\Omega^{\text{group}}_r \sim \text{LKJ}(2)$
 - Year AR(1) parameters: $\rho_k \sim \mathcal{N}(0, 0.5)$, $\sigma_{\text{year},k} \sim \mathcal{N}^+(0, 1)$
 - Continuous outcome noise: $\sigma_k \sim \mathcal{N}^+(0, 1)$
+
+For RP, these baseline priors are replaced by EB-informed priors when `results/prior_predictive/rp_prior_summary.csv` is available.
