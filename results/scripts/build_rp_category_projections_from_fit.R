@@ -30,11 +30,16 @@ pick_col <- function(df, candidates) {
 atc <- read_csv(atc_ip_path, show_col_types = FALSE)
 id_col <- pick_col(atc, c("playerid", "PlayerId", "player_id"))
 ip_col <- pick_col(atc, c("IP", "ip"))
-if (is.null(id_col) || is.null(ip_col)) {
-  stop("ATC IP file must include playerid and IP columns: ", atc_ip_path)
+team_col <- pick_col(atc, c("Team", "team"))
+if (is.null(id_col) || is.null(ip_col) || is.null(team_col)) {
+  stop("ATC IP file must include playerid, IP, and Team columns: ", atc_ip_path)
 }
 atc <- atc %>%
-  transmute(playerid = as.character(.data[[id_col]]), IP_atc = as.numeric(.data[[ip_col]])) %>%
+  transmute(
+    playerid = as.character(.data[[id_col]]),
+    Team = as.character(.data[[team_col]]),
+    IP_atc = as.numeric(.data[[ip_col]])
+  ) %>%
   filter(!is.na(playerid), !is.na(IP_atc))
 
 eta_pred <- rstan::extract(fit, pars = "eta_pred")$eta_pred

@@ -7,7 +7,7 @@ suppressPackageStartupMessages({
 fit_path <- 'models/sp_model_fit.rds'
 prep_path <- 'models/sp_model_inputs.rds'
 input_path <- 'data/fangraphs_pitchers_2018_2025.csv'
-results_dir <- 'results/plots/fitted_outcome_curves/pitchers/starters'
+results_dir <- 'results/plots/trends/pitchers/starters'
 
 if (!dir.exists('results')) dir.create('results')
 if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)

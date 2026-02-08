@@ -28,23 +28,23 @@ make_table <- function(df, include_position = FALSE) {
     )
   if (include_position) {
     header <- paste(
-      "| Rank | Player | Position | Composite z | z_HR | z_R | z_RBI | z_SB | z_OBP | z_SLG |",
-      "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|",
+      "| Rank | Player | Team | Position | Composite z | z_HR | z_R | z_RBI | z_SB | z_OBP | z_SLG |",
+      "|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
       sep = "\n"
     )
     rows <- paste0(
-      "| ", seq_len(nrow(df)), " | ", df$PlayerName, " | ", df$position_primary,
+      "| ", seq_len(nrow(df)), " | ", df$PlayerName, " | ", ifelse(is.na(df$Team), "", df$Team), " | ", df$position_primary,
       " | ", df$composite_z, " | ", df$z_HR, " | ", df$z_R, " | ", df$z_RBI,
       " | ", df$z_SB, " | ", df$z_OBP, " | ", df$z_SLG, " |"
     )
   } else {
     header <- paste(
-      "| Rank | Player | Composite z | z_HR | z_R | z_RBI | z_SB | z_OBP | z_SLG |",
-      "|---:|---|---:|---:|---:|---:|---:|---:|---:|",
+      "| Rank | Player | Team | Composite z | z_HR | z_R | z_RBI | z_SB | z_OBP | z_SLG |",
+      "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|",
       sep = "\n"
     )
     rows <- paste0(
-      "| ", seq_len(nrow(df)), " | ", df$PlayerName,
+      "| ", seq_len(nrow(df)), " | ", df$PlayerName, " | ", ifelse(is.na(df$Team), "", df$Team),
       " | ", df$composite_z, " | ", df$z_HR, " | ", df$z_R, " | ", df$z_RBI,
       " | ", df$z_SB, " | ", df$z_OBP, " | ", df$z_SLG, " |"
     )

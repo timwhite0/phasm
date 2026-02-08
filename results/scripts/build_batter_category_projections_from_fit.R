@@ -45,11 +45,16 @@ pick_col <- function(df, candidates) {
 atc <- read_csv(atc_pa_path, show_col_types = FALSE)
 id_col <- pick_col(atc, c("playerid", "PlayerId", "player_id"))
 pa_col <- pick_col(atc, c("PA", "pa"))
-if (is.null(id_col) || is.null(pa_col)) {
-  stop("ATC PA file must include playerid and PA columns: ", atc_pa_path)
+team_col <- pick_col(atc, c("Team", "team"))
+if (is.null(id_col) || is.null(pa_col) || is.null(team_col)) {
+  stop("ATC PA file must include playerid, PA, and Team columns: ", atc_pa_path)
 }
 atc <- atc %>%
-  transmute(playerid = as.character(.data[[id_col]]), PA_atc = as.numeric(.data[[pa_col]])) %>%
+  transmute(
+    playerid = as.character(.data[[id_col]]),
+    Team = as.character(.data[[team_col]]),
+    PA_atc = as.numeric(.data[[pa_col]])
+  ) %>%
   filter(!is.na(playerid), !is.na(PA_atc))
 
 proj <- player_lookup %>%

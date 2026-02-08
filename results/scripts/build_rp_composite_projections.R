@@ -20,13 +20,15 @@ pick_col <- function(df, candidates) {
 
 id_col <- pick_col(atc, c("playerid", "PlayerId", "player_id"))
 ip_col <- pick_col(atc, c("IP", "ip"))
-if (is.null(id_col) || is.null(ip_col)) {
-  stop("Could not find playerid or IP column in ATC projections.")
+team_col <- pick_col(atc, c("Team", "team"))
+if (is.null(id_col) || is.null(ip_col) || is.null(team_col)) {
+  stop("Could not find playerid, IP, or Team column in ATC projections.")
 }
 
 atc <- atc %>%
   transmute(
     playerid = as.character(.data[[id_col]]),
+    Team = as.character(.data[[team_col]]),
     IP_atc = as.numeric(.data[[ip_col]])
   ) %>%
   filter(!is.na(playerid), !is.na(IP_atc))
@@ -62,7 +64,7 @@ proj <- proj %>%
 write_csv(
   proj %>%
     select(
-      playerid, PlayerName, role,
+      playerid, PlayerName, Team, role,
       ERA, WHIP, Ks, W, SVH, IP_atc,
       z_ERA, z_WHIP, z_IP, z_W, z_Ks, z_SVH, composite
     ),

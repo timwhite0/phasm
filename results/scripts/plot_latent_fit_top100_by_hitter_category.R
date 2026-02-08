@@ -7,7 +7,7 @@ suppressPackageStartupMessages({
 fit_path <- 'models/hitter_model_fit.rds'
 prep_path <- 'models/hitter_model_inputs.rds'
 input_path <- 'data/fangraphs_batters_2018_2025.csv'
-results_dir <- 'results/plots/fitted_outcome_curves/batters'
+results_dir <- 'results/plots/trends/batters'
 
 if (!dir.exists('results')) dir.create('results')
 if (!dir.exists(results_dir)) dir.create(results_dir)
@@ -239,7 +239,10 @@ for (o in outcomes) {
     scale_x_continuous(breaks = 2018:2026) +
     scale_color_manual(values = c(fit = 'gold3', projection = 'steelblue3')) +
     labs(
-      title = paste0(o, ': observed (black), fitted (gold), 2026 projection (blue)'),
+      title = paste0(
+        if (o %in% c('H','R','RBI','HR','SB')) paste0(o, ' (per PA)') else o,
+        ': observed (black), fitted (gold), 2026 projection (blue)'
+      ),
       y = if (o %in% c('H','R','RBI','HR','SB')) paste0(o, ' per PA') else o,
       x = 'Season'
     ) +

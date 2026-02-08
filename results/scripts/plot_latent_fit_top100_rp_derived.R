@@ -8,7 +8,7 @@ fit_path <- "models/rp_model_fit.rds"
 prep_path <- "models/rp_model_inputs.rds"
 input_path <- "data/fangraphs_pitchers_2018_2025.csv"
 atc_ip_path <- "data/atc_ip_projections_2026.csv"
-results_dir <- "results/plots/fitted_outcome_curves/pitchers/relievers"
+results_dir <- "results/plots/trends/pitchers/relievers"
 
 if (!dir.exists("results")) dir.create("results")
 if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)

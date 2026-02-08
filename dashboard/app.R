@@ -27,9 +27,9 @@ if (!is.na(results_root) && dir.exists(results_root)) {
 }
 
 plot_roots <- list(
-  fitted_batters = file.path(results_root, "plots", "fitted_outcome_curves", "batters"),
-  fitted_pitchers_sp = file.path(results_root, "plots", "fitted_outcome_curves", "pitchers", "starters"),
-  fitted_pitchers_rp = file.path(results_root, "plots", "fitted_outcome_curves", "pitchers", "relievers"),
+  fitted_batters = file.path(results_root, "plots", "trends", "batters"),
+  fitted_pitchers_sp = file.path(results_root, "plots", "trends", "pitchers", "starters"),
+  fitted_pitchers_rp = file.path(results_root, "plots", "trends", "pitchers", "relievers"),
   interval_batters = file.path(results_root, "plots", "interval_projections", "batters"),
   interval_pitchers_sp = file.path(results_root, "plots", "interval_projections", "pitchers", "starters"),
   interval_pitchers_rp = file.path(results_root, "plots", "interval_projections", "pitchers", "relievers")
@@ -170,7 +170,7 @@ ui <- dashboardPage(
             div(
               class = "plot-controls",
               fluidRow(
-                column(4, selectInput("hitter_plot_type", "Plot type", choices = c("Fitted outcomes", "Interval projections"))),
+                column(4, selectInput("hitter_plot_type", "Plot type", choices = c("Trends", "Interval projections"))),
                 column(8, uiOutput("hitter_outcome_ui"))
               )
             )
@@ -191,7 +191,7 @@ ui <- dashboardPage(
             div(
               class = "plot-controls",
               fluidRow(
-                column(4, selectInput("sp_plot_type", "Plot type", choices = c("Fitted outcomes", "Interval projections"))),
+                column(4, selectInput("sp_plot_type", "Plot type", choices = c("Trends", "Interval projections"))),
                 column(8, uiOutput("sp_outcome_ui"))
               )
             )
@@ -212,7 +212,7 @@ ui <- dashboardPage(
             div(
               class = "plot-controls",
               fluidRow(
-                column(4, selectInput("rp_plot_type", "Plot type", choices = c("Fitted outcomes", "Interval projections"))),
+                column(4, selectInput("rp_plot_type", "Plot type", choices = c("Trends", "Interval projections"))),
                 column(8, uiOutput("rp_outcome_ui"))
               )
             )
@@ -231,17 +231,26 @@ ui <- dashboardPage(
           box(width = 12, uiOutput("hitter_position_ui"))
         ),
         fluidRow(
+          box(width = 12, uiOutput("hitter_team_ui"))
+        ),
+        fluidRow(
           box(width = 12, DTOutput("batters_table"))
         )
       ),
       tabItem(
         tabName = "starters",
         fluidRow(
+          box(width = 12, uiOutput("sp_team_ui"))
+        ),
+        fluidRow(
           box(width = 12, DTOutput("sp_table"))
         )
       ),
       tabItem(
         tabName = "relievers",
+        fluidRow(
+          box(width = 12, uiOutput("rp_team_ui"))
+        ),
         fluidRow(
           box(width = 12, DTOutput("rp_table"))
         )
@@ -250,6 +259,9 @@ ui <- dashboardPage(
         tabName = "hitter_projections",
         fluidRow(
           box(width = 12, uiOutput("hitter_proj_outcome_ui"))
+        ),
+        fluidRow(
+          box(width = 12, uiOutput("hitter_proj_team_ui"))
         ),
         fluidRow(
           box(width = 12, uiOutput("hitter_proj_position_ui"))
@@ -264,6 +276,9 @@ ui <- dashboardPage(
           box(width = 12, uiOutput("sp_proj_outcome_ui"))
         ),
         fluidRow(
+          box(width = 12, uiOutput("sp_proj_team_ui"))
+        ),
+        fluidRow(
           box(width = 12, DTOutput("sp_proj_table"))
         )
       ),
@@ -271,6 +286,9 @@ ui <- dashboardPage(
         tabName = "rp_projections",
         fluidRow(
           box(width = 12, uiOutput("rp_proj_outcome_ui"))
+        ),
+        fluidRow(
+          box(width = 12, uiOutput("rp_proj_team_ui"))
         ),
         fluidRow(
           box(width = 12, DTOutput("rp_proj_table"))
@@ -297,7 +315,8 @@ server <- function(input, output, session) {
       tags$ul(
         tags$li("Estimates latent player skill trajectories over time with shared year effects."),
         tags$li("Produces 2026 projections and uncertainty intervals (5th/95th percentiles) for each outcome."),
-        tags$li("Builds composite rankings from category z-scores for hitters, starters, and relievers.")
+        tags$li("Builds composite rankings from category z-scores for hitters, starters, and relievers."),
+        tags$li("Carries 2026 Team from ATC projections into projection/composite outputs and app tables.")
       ),
       tags$div(style = "height: 12px;"),
       tags$h4(tags$strong("Covariates used")),
@@ -344,22 +363,22 @@ server <- function(input, output, session) {
       tags$h4(tags$strong("Tabs in this app")),
       tags$ul(
         tags$li("Overview: This summary of the model and app contents."),
-        tags$li("Hitter Plots: Fitted outcomes and interval projections for hitters."),
-        tags$li("Starter Plots: Fitted outcomes for W/QS plus derived ERA/K/9/BB/9/WHIP; interval projections by role."),
-        tags$li("Reliever Plots: Fitted outcomes for W/SVHLD plus derived ERA/K/9/BB/9/WHIP; interval projections by role."),
-        tags$li("Hitter Projections: Outcome-specific posterior mean and quantiles (with PA scaling for counts)."),
-        tags$li("Starter Projections: Outcome-specific posterior mean and quantiles (with IP scaling)."),
-        tags$li("Reliever Projections: Outcome-specific posterior mean and quantiles (with IP scaling)."),
-        tags$li("Composite Hitter Rankings: Sortable composite z-score table for hitters."),
-        tags$li("Composite Starter Rankings: Sortable composite z-score table for starters."),
-        tags$li("Composite Reliever Rankings: Sortable composite z-score table for relievers.")
+        tags$li("Hitter Plots: Trends and interval projections for hitters."),
+        tags$li("Starter Plots: Trends for W/QS plus derived ERA/K/9/BB/9/WHIP; interval projections by role."),
+        tags$li("Reliever Plots: Trends for W/SVHLD plus derived ERA/K/9/BB/9/WHIP; interval projections by role."),
+        tags$li("Hitter Projections: Outcome-specific posterior mean and quantiles (with PA scaling for counts), with Position and Team filters."),
+        tags$li("Starter Projections: Outcome-specific posterior mean and quantiles (with IP scaling), with Team filter."),
+        tags$li("Reliever Projections: Outcome-specific posterior mean and quantiles (with IP scaling), with Team filter."),
+        tags$li("Composite Hitter Rankings: Sortable composite z-score table for hitters, with Position and Team filters."),
+        tags$li("Composite Starter Rankings: Sortable composite z-score table for starters, with Team filter."),
+        tags$li("Composite Reliever Rankings: Sortable composite z-score table for relievers, with Team filter.")
       )
     )
   })
 
   output$hitter_outcome_ui <- renderUI({
     type <- input$hitter_plot_type
-    if (type == "Fitted outcomes") {
+    if (type == "Trends") {
       files <- list_pdfs(plot_roots$fitted_batters)
       choices <- outcome_choices(files, c("latent_fit_top100_"))
       selectInput("hitter_outcome", "Outcome", choices = choices)
@@ -372,7 +391,7 @@ server <- function(input, output, session) {
 
   output$sp_outcome_ui <- renderUI({
     type <- input$sp_plot_type
-    if (type == "Fitted outcomes") {
+    if (type == "Trends") {
       files <- list_pdfs(plot_roots$fitted_pitchers_sp)
       choices <- outcome_choices(files, c("sp_latent_fit_top100_", "sp_latent_fit_derived_"))
       selectInput("sp_outcome", "Outcome", choices = choices)
@@ -384,7 +403,7 @@ server <- function(input, output, session) {
 
   output$rp_outcome_ui <- renderUI({
     type <- input$rp_plot_type
-    if (type == "Fitted outcomes") {
+    if (type == "Trends") {
       files <- list_pdfs(plot_roots$fitted_pitchers_rp)
       choices <- outcome_choices(files, c("rp_latent_fit_top100_", "rp_latent_fit_derived_"))
       selectInput("rp_outcome", "Outcome", choices = choices)
@@ -412,8 +431,8 @@ render_plot_image <- function(file, subdir) {
     type <- input$hitter_plot_type
     file <- input$hitter_outcome
     req(file, nzchar(file))
-    subdir <- if (type == "Fitted outcomes") {
-      file.path("plots", "fitted_outcome_curves", "batters")
+    subdir <- if (type == "Trends") {
+      file.path("plots", "trends", "batters")
     } else {
       file.path("plots", "interval_projections", "batters")
     }
@@ -429,6 +448,15 @@ render_plot_image <- function(file, subdir) {
     if (!"position" %in% names(df)) return(NULL)
     choices <- sort(unique(sub("/.*$", "", df$position)))
     selectInput("hitter_position", "Position", choices = c("All", choices), selected = "All")
+  })
+  output$hitter_team_ui <- renderUI({
+    path <- file.path(results_root, "projections", "batters", "composite_projections_2026.csv")
+    if (!file.exists(path)) return(NULL)
+    df <- read_csv(path, show_col_types = FALSE)
+    if (!"Team" %in% names(df)) return(NULL)
+    choices <- sort(unique(df$Team))
+    choices <- choices[!is.na(choices) & nzchar(choices)]
+    selectInput("hitter_team", "Team", choices = c("All", choices), selected = "All")
   })
 
   output$hitter_proj_outcome_ui <- renderUI({
@@ -448,23 +476,68 @@ render_plot_image <- function(file, subdir) {
     choices <- sort(unique(sub("/.*$", "", df$position)))
     selectInput("hitter_proj_position", "Position", choices = c("All", choices), selected = "All")
   })
+  output$hitter_proj_team_ui <- renderUI({
+    path <- file.path(results_root, "projections", "batters", "category_projections_2026.csv")
+    if (!file.exists(path)) return(NULL)
+    df <- read_csv(path, show_col_types = FALSE)
+    if (!"Team" %in% names(df)) return(NULL)
+    choices <- sort(unique(df$Team))
+    choices <- choices[!is.na(choices) & nzchar(choices)]
+    selectInput("hitter_proj_team", "Team", choices = c("All", choices), selected = "All")
+  })
 
   output$sp_proj_outcome_ui <- renderUI({
     choices <- c("ERA", "K/9", "WHIP", "BB/9", "W", "Ks", "QS")
     selectInput("sp_proj_outcome", "Outcome", choices = choices)
+  })
+  output$sp_team_ui <- renderUI({
+    path <- file.path(results_root, "projections", "pitchers", "sp_composite_projections_2026.csv")
+    if (!file.exists(path)) return(NULL)
+    df <- read_csv(path, show_col_types = FALSE)
+    if (!"Team" %in% names(df)) return(NULL)
+    choices <- sort(unique(df$Team))
+    choices <- choices[!is.na(choices) & nzchar(choices)]
+    selectInput("sp_team", "Team", choices = c("All", choices), selected = "All")
+  })
+  output$sp_proj_team_ui <- renderUI({
+    path <- file.path(results_root, "projections", "pitchers", "sp_category_projections_2026.csv")
+    if (!file.exists(path)) return(NULL)
+    df <- read_csv(path, show_col_types = FALSE)
+    if (!"Team" %in% names(df)) return(NULL)
+    choices <- sort(unique(df$Team))
+    choices <- choices[!is.na(choices) & nzchar(choices)]
+    selectInput("sp_proj_team", "Team", choices = c("All", choices), selected = "All")
   })
 
   output$rp_proj_outcome_ui <- renderUI({
     choices <- c("ERA", "K/9", "WHIP", "BB/9", "W", "Ks", "SVHLD")
     selectInput("rp_proj_outcome", "Outcome", choices = choices)
   })
+  output$rp_team_ui <- renderUI({
+    path <- file.path(results_root, "projections", "pitchers", "rp_composite_projections_2026.csv")
+    if (!file.exists(path)) return(NULL)
+    df <- read_csv(path, show_col_types = FALSE)
+    if (!"Team" %in% names(df)) return(NULL)
+    choices <- sort(unique(df$Team))
+    choices <- choices[!is.na(choices) & nzchar(choices)]
+    selectInput("rp_team", "Team", choices = c("All", choices), selected = "All")
+  })
+  output$rp_proj_team_ui <- renderUI({
+    path <- file.path(results_root, "projections", "pitchers", "rp_category_projections_2026.csv")
+    if (!file.exists(path)) return(NULL)
+    df <- read_csv(path, show_col_types = FALSE)
+    if (!"Team" %in% names(df)) return(NULL)
+    choices <- sort(unique(df$Team))
+    choices <- choices[!is.na(choices) & nzchar(choices)]
+    selectInput("rp_proj_team", "Team", choices = c("All", choices), selected = "All")
+  })
 
   output$sp_plot_image <- renderImage({
     type <- input$sp_plot_type
     file <- input$sp_outcome
     req(file, nzchar(file))
-    subdir <- if (type == "Fitted outcomes") {
-      file.path("plots", "fitted_outcome_curves", "pitchers", "starters")
+    subdir <- if (type == "Trends") {
+      file.path("plots", "trends", "pitchers", "starters")
     } else {
       file.path("plots", "interval_projections", "pitchers", "starters")
     }
@@ -477,8 +550,8 @@ render_plot_image <- function(file, subdir) {
     type <- input$rp_plot_type
     file <- input$rp_outcome
     req(file, nzchar(file))
-    subdir <- if (type == "Fitted outcomes") {
-      file.path("plots", "fitted_outcome_curves", "pitchers", "relievers")
+    subdir <- if (type == "Trends") {
+      file.path("plots", "trends", "pitchers", "relievers")
     } else {
       file.path("plots", "interval_projections", "pitchers", "relievers")
     }
@@ -505,9 +578,14 @@ render_plot_image <- function(file, subdir) {
       df <- df %>% mutate(position = sub("/.*$", "", position))
     }
     if (all(c("Name", "position", "Composite z-score") %in% names(df))) {
-      df <- df %>% rename(Position = position) %>% select(Name, Position, `Composite z-score`, everything())
+      df <- df %>% rename(Position = position)
+      front <- c("Name", "Team", "Position", "Composite z-score")
+      front <- front[front %in% names(df)]
+      df <- df %>% select(all_of(front), everything())
     } else if (all(c("Name", "Composite z-score") %in% names(df))) {
-      df <- df %>% select(Name, `Composite z-score`, everything())
+      front <- c("Name", "Team", "Composite z-score")
+      front <- front[front %in% names(df)]
+      df <- df %>% select(all_of(front), everything())
     }
     if ("Composite z-score" %in% names(df)) {
       df <- df %>% mutate(.comp_raw = as.numeric(`Composite z-score`))
@@ -517,6 +595,11 @@ render_plot_image <- function(file, subdir) {
         input$hitter_position != "All" &&
         "Position" %in% names(df)) {
       df <- df %>% filter(Position == input$hitter_position)
+    }
+    if (!is.null(input$hitter_team) &&
+        input$hitter_team != "All" &&
+        "Team" %in% names(df)) {
+      df <- df %>% filter(Team == input$hitter_team)
     }
     if ("Composite z-score" %in% names(df) && ".comp_raw" %in% names(df)) {
       df <- df %>% mutate(Rank = dense_rank(desc(.comp_raw)))
@@ -549,14 +632,21 @@ render_plot_image <- function(file, subdir) {
       names(df)[match(z_cols, names(df))] <- new_names
     }
     # keep only name + z-scores for pitchers
-    keep_cols <- c("Name", "Composite z-score", names(df)[grepl("z-score$", names(df))])
+    keep_cols <- c("Name", "Team", "Composite z-score", names(df)[grepl("z-score$", names(df))])
     keep_cols <- keep_cols[keep_cols %in% names(df)]
     df <- df %>% select(all_of(keep_cols))
     if (all(c("Name", "Composite z-score") %in% names(df))) {
-      df <- df %>% select(Name, `Composite z-score`, everything())
+      front <- c("Name", "Team", "Composite z-score")
+      front <- front[front %in% names(df)]
+      df <- df %>% select(all_of(front), everything())
     }
     if ("Composite z-score" %in% names(df)) {
       df <- df %>% mutate(.comp_raw = as.numeric(`Composite z-score`))
+    }
+    if (!is.null(input$sp_team) &&
+        input$sp_team != "All" &&
+        "Team" %in% names(df)) {
+      df <- df %>% filter(Team == input$sp_team)
     }
     score_cols <- names(df)[grepl("z-score$", names(df))]
     if ("Composite z-score" %in% names(df) && ".comp_raw" %in% names(df)) {
@@ -590,14 +680,21 @@ render_plot_image <- function(file, subdir) {
       names(df)[match(z_cols, names(df))] <- new_names
     }
     # keep only name + z-scores for pitchers
-    keep_cols <- c("Name", "Composite z-score", names(df)[grepl("z-score$", names(df))])
+    keep_cols <- c("Name", "Team", "Composite z-score", names(df)[grepl("z-score$", names(df))])
     keep_cols <- keep_cols[keep_cols %in% names(df)]
     df <- df %>% select(all_of(keep_cols))
     if (all(c("Name", "Composite z-score") %in% names(df))) {
-      df <- df %>% select(Name, `Composite z-score`, everything())
+      front <- c("Name", "Team", "Composite z-score")
+      front <- front[front %in% names(df)]
+      df <- df %>% select(all_of(front), everything())
     }
     if ("Composite z-score" %in% names(df)) {
       df <- df %>% mutate(.comp_raw = as.numeric(`Composite z-score`))
+    }
+    if (!is.null(input$rp_team) &&
+        input$rp_team != "All" &&
+        "Team" %in% names(df)) {
+      df <- df %>% filter(Team == input$rp_team)
     }
     score_cols <- names(df)[grepl("z-score$", names(df))]
     if ("Composite z-score" %in% names(df) && ".comp_raw" %in% names(df)) {
@@ -640,6 +737,7 @@ render_plot_image <- function(file, subdir) {
     df <- df %>%
       transmute(
         Name = PlayerName,
+        Team = if ("Team" %in% names(df)) Team else NA_character_,
         Position = if ("Position" %in% names(df)) Position else NA_character_,
         `0.05 quantile` = .data[[p05_col]],
         `Posterior mean` = .data[[mean_col]],
@@ -650,8 +748,13 @@ render_plot_image <- function(file, subdir) {
         "Position" %in% names(df)) {
       df <- df %>% filter(Position == input$hitter_proj_position)
     }
+    if (!is.null(input$hitter_proj_team) &&
+        input$hitter_proj_team != "All" &&
+        "Team" %in% names(df)) {
+      df <- df %>% filter(Team == input$hitter_proj_team)
+    }
     if ("Position" %in% names(df)) {
-      df <- df %>% select(Name, Position, `0.05 quantile`, `Posterior mean`, `0.95 quantile`)
+      df <- df %>% select(Name, Team, Position, `0.05 quantile`, `Posterior mean`, `0.95 quantile`)
     }
     if (outcome %in% c("AVG", "OBP", "SLG")) {
       df <- df %>%
@@ -703,10 +806,16 @@ render_plot_image <- function(file, subdir) {
     df <- df %>%
       transmute(
         Name = PlayerName,
+        Team = if ("Team" %in% names(df)) Team else NA_character_,
         `0.05 quantile` = .data[[cols[2]]],
         `Posterior mean` = .data[[cols[1]]],
         `0.95 quantile` = .data[[cols[3]]]
       )
+    if (!is.null(input$sp_proj_team) &&
+        input$sp_proj_team != "All" &&
+        "Team" %in% names(df)) {
+      df <- df %>% filter(Team == input$sp_proj_team)
+    }
     order_dir <- if (outcome %in% c("ERA", "WHIP", "BB/9")) "asc" else "desc"
     default_order <- list(list(which(names(df) == "Posterior mean") - 1L, order_dir))
     dt <- datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)
@@ -748,10 +857,16 @@ render_plot_image <- function(file, subdir) {
     df <- df %>%
       transmute(
         Name = PlayerName,
+        Team = if ("Team" %in% names(df)) Team else NA_character_,
         `0.05 quantile` = .data[[cols[2]]],
         `Posterior mean` = .data[[cols[1]]],
         `0.95 quantile` = .data[[cols[3]]]
       )
+    if (!is.null(input$rp_proj_team) &&
+        input$rp_proj_team != "All" &&
+        "Team" %in% names(df)) {
+      df <- df %>% filter(Team == input$rp_proj_team)
+    }
     order_dir <- if (outcome %in% c("ERA", "WHIP", "BB/9")) "asc" else "desc"
     default_order <- list(list(which(names(df) == "Posterior mean") - 1L, order_dir))
     dt <- datatable(df, options = list(pageLength = 25, scrollX = TRUE, order = default_order), rownames = FALSE)

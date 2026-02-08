@@ -9,6 +9,7 @@ probabilistic forecasts of per-PA/per-IP rates and rate stats. The system also s
 projections when paired with external PA/IP forecasts.
 Category projection outputs include posterior mean and quantiles (p05, p50, p95). Count outcomes are also
 stored as totals using ATC PA/IP (e.g., H_mean_t, Ks_mean, W_mean_t, SVHLD_mean_t).
+Projection and composite outputs also carry 2026 `Team` from ATC projection files.
 
 ## What this does
 - Fits a joint multivariate Bayesian model (rstan) for H, R, RBI, HR, SB (per-PA rates) plus AVG, OBP, SLG.
@@ -47,7 +48,7 @@ stored as totals using ATC PA/IP (e.g., H_mean_t, Ks_mean, W_mean_t, SVHLD_mean_
   - `results/scripts/build_rp_category_projections_from_fit.R`
 
 ## Plots
-- Fitted outcome curves:
+- Trends:
   - Hitters: all modeled outcomes.
   - Starters: W and QS (per-IP), plus derived ERA/K/9/BB/9/WHIP.
   - Relievers: W and SVHLD (per-IP), plus derived ERA/K/9/BB/9/WHIP.
@@ -98,6 +99,8 @@ use IP instead of PA for the offset, and model:
 - Shiny app lives in `dashboard/app.R`.
 - Run from repo root:
   - `Rscript -e "shiny::runApp('dashboard', port = 3838, launch.browser = TRUE)"`
+- Composite ranking tabs support both position/role filters and `Team` filters.
+- Projection tabs support `Team` filters (and hitter position filter).
 
 ### Notation
 - Players $i = 1..I$, positions $p = 1..P$, years $y = 1..Y$

@@ -26,23 +26,23 @@ make_table <- function(df, include_role = FALSE) {
     )
   if (include_role) {
     header <- paste(
-      "| Rank | Player | Role | Composite z | z_ERA | z_Ks | z_WHIP | z_IP | z_WQS |",
-      "|---:|---|---|---:|---:|---:|---:|---:|---:|",
+      "| Rank | Player | Team | Role | Composite z | z_ERA | z_Ks | z_WHIP | z_IP | z_WQS |",
+      "|---:|---|---|---|---:|---:|---:|---:|---:|---:|",
       sep = "\n"
     )
     rows <- paste0(
-      "| ", seq_len(nrow(df)), " | ", df$PlayerName, " | ", df$role,
+      "| ", seq_len(nrow(df)), " | ", df$PlayerName, " | ", ifelse(is.na(df$Team), "", df$Team), " | ", df$role,
       " | ", df$composite_z, " | ", df$z_ERA, " | ", df$z_Ks,
       " | ", df$z_WHIP, " | ", df$z_IP, " | ", df$z_WQS, " |"
     )
   } else {
     header <- paste(
-      "| Rank | Player | Composite z | z_ERA | z_Ks | z_WHIP | z_IP | z_WQS |",
-      "|---:|---|---:|---:|---:|---:|---:|---:|",
+      "| Rank | Player | Team | Composite z | z_ERA | z_Ks | z_WHIP | z_IP | z_WQS |",
+      "|---:|---|---|---:|---:|---:|---:|---:|---:|",
       sep = "\n"
     )
     rows <- paste0(
-      "| ", seq_len(nrow(df)), " | ", df$PlayerName,
+      "| ", seq_len(nrow(df)), " | ", df$PlayerName, " | ", ifelse(is.na(df$Team), "", df$Team),
       " | ", df$composite_z, " | ", df$z_ERA, " | ", df$z_Ks,
       " | ", df$z_WHIP, " | ", df$z_IP, " | ", df$z_WQS, " |"
     )
@@ -63,23 +63,23 @@ make_table_rp <- function(df, include_role = FALSE) {
     )
   if (include_role) {
     header <- paste(
-      "| Rank | Player | Role | Composite z | z_ERA | z_WHIP | z_IP | z_W | z_Ks | z_SVH |",
-      "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|",
+      "| Rank | Player | Team | Role | Composite z | z_ERA | z_WHIP | z_IP | z_W | z_Ks | z_SVH |",
+      "|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
       sep = "\n"
     )
     rows <- paste0(
-      "| ", seq_len(nrow(df)), " | ", df$PlayerName, " | ", df$role,
+      "| ", seq_len(nrow(df)), " | ", df$PlayerName, " | ", ifelse(is.na(df$Team), "", df$Team), " | ", df$role,
       " | ", df$composite_z, " | ", df$z_ERA, " | ", df$z_WHIP,
       " | ", df$z_IP, " | ", df$z_W, " | ", df$z_Ks, " | ", df$z_SVH, " |"
     )
   } else {
     header <- paste(
-      "| Rank | Player | Composite z | z_ERA | z_WHIP | z_IP | z_W | z_Ks | z_SVH |",
-      "|---:|---|---:|---:|---:|---:|---:|---:|---:|",
+      "| Rank | Player | Team | Composite z | z_ERA | z_WHIP | z_IP | z_W | z_Ks | z_SVH |",
+      "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|",
       sep = "\n"
     )
     rows <- paste0(
-      "| ", seq_len(nrow(df)), " | ", df$PlayerName,
+      "| ", seq_len(nrow(df)), " | ", df$PlayerName, " | ", ifelse(is.na(df$Team), "", df$Team),
       " | ", df$composite_z, " | ", df$z_ERA, " | ", df$z_WHIP,
       " | ", df$z_IP, " | ", df$z_W, " | ", df$z_Ks, " | ", df$z_SVH, " |"
     )

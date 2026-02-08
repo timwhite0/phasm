@@ -11,14 +11,27 @@ if (length(missing) > 0) {
   stop('Missing columns in category projections: ', paste(missing, collapse=', '))
 }
 
-if (!"PlayerId" %in% names(atc) || !"PA" %in% names(atc)) {
-  stop("ATC projections must include PlayerId and PA.")
+pick_col <- function(df, candidates) {
+  hit <- candidates[candidates %in% names(df)]
+  if (length(hit) == 0) return(NULL)
+  hit[[1]]
+}
+
+id_col <- pick_col(atc, c("playerid", "PlayerId", "player_id"))
+pa_col <- pick_col(atc, c("PA", "pa"))
+team_col <- pick_col(atc, c("Team", "team"))
+if (is.null(id_col) || is.null(pa_col) || is.null(team_col)) {
+  stop("ATC projections must include playerid, PA, and Team.")
 }
 
 vals <- proj %>%
   mutate(playerid = as.character(playerid)) %>%
   left_join(
-    atc %>% transmute(playerid = as.character(PlayerId), PA_atc = as.numeric(PA)),
+    atc %>% transmute(
+      playerid = as.character(.data[[id_col]]),
+      Team = as.character(.data[[team_col]]),
+      PA_atc = as.numeric(.data[[pa_col]])
+    ),
     by = "playerid",
     suffix = c("", "_atc")
   ) %>%
@@ -28,6 +41,7 @@ vals <- proj %>%
   transmute(
     playerid,
     PlayerName,
+    Team,
     position,
     PA_atc,
     HR = HR_mean * PA_atc,
@@ -57,7 +71,7 @@ vals_z <- vals %>%
   mutate(composite_zscore = (z_HR + z_R + z_RBI + z_SB + z_OBP + z_SLG) / 6)
 
 out <- vals_z %>%
-  select(playerid, PlayerName, position, PA_atc, composite_zscore,
+  select(playerid, PlayerName, Team, position, PA_atc, composite_zscore,
          z_HR, z_R, z_RBI, z_SB, z_OBP, z_SLG)
 
 write_csv(out, 'results/projections/batters/composite_projections_2026.csv')
