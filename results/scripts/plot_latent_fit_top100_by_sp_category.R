@@ -200,7 +200,7 @@ for (o in outcomes) {
   order_df <- order_df %>% distinct(PlayerName)
   plot_df$PlayerName <- factor(plot_df$PlayerName, levels = order_df$PlayerName)
 
-  write_csv(plot_df, file.path(results_dir, paste0('sp_latent_fit_top100_', o, '_data.csv')))
+  write_csv(plot_df, file.path(results_dir, paste0('sp_trends_top100_', o, '_data.csv')))
 
   p <- ggplot(plot_df, aes(x = Season, group = PlayerName)) +
     geom_linerange(aes(ymin = fitted_p05, ymax = fitted_p95, color = type), linewidth = 0.6, alpha = 0.7, na.rm = TRUE) +
@@ -223,7 +223,7 @@ for (o in outcomes) {
       axis.text.x = element_text(angle = 45, hjust = 1)
     )
 
-  ggsave(filename = file.path(results_dir, paste0('sp_latent_fit_top100_', o, '.pdf')),
+  ggsave(filename = file.path(results_dir, paste0('sp_trends_top100_', o, '.pdf')),
          plot = p, width = 18, height = 12)
 }
 

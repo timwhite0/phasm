@@ -380,7 +380,7 @@ server <- function(input, output, session) {
     type <- input$hitter_plot_type
     if (type == "Trends") {
       files <- list_pdfs(plot_roots$fitted_batters)
-      choices <- outcome_choices(files, c("latent_fit_top100_"))
+      choices <- outcome_choices(files, c("trends_top100_"))
       selectInput("hitter_outcome", "Outcome", choices = choices)
     } else {
       files <- list_pdfs(plot_roots$interval_batters)
@@ -393,7 +393,7 @@ server <- function(input, output, session) {
     type <- input$sp_plot_type
     if (type == "Trends") {
       files <- list_pdfs(plot_roots$fitted_pitchers_sp)
-      choices <- outcome_choices(files, c("sp_latent_fit_top100_", "sp_latent_fit_derived_"))
+      choices <- outcome_choices(files, c("sp_trends_top100_", "sp_trends_derived_"))
       selectInput("sp_outcome", "Outcome", choices = choices)
     } else {
       choices <- c("Projection intervals" = "sp_intervals_2026_SP.pdf")
@@ -405,7 +405,7 @@ server <- function(input, output, session) {
     type <- input$rp_plot_type
     if (type == "Trends") {
       files <- list_pdfs(plot_roots$fitted_pitchers_rp)
-      choices <- outcome_choices(files, c("rp_latent_fit_top100_", "rp_latent_fit_derived_"))
+      choices <- outcome_choices(files, c("rp_trends_top100_", "rp_trends_derived_"))
       selectInput("rp_outcome", "Outcome", choices = choices)
     } else {
       choices <- c("Projection intervals" = "rp_intervals_2026_RP.pdf")

@@ -237,7 +237,7 @@ for (metric in metrics) {
   order_df <- order_df %>% distinct(PlayerName)
   plot_df$PlayerName <- factor(plot_df$PlayerName, levels = order_df$PlayerName)
 
-  write_csv(plot_df, file.path(results_dir, paste0("rp_latent_fit_derived_", metric, "_data.csv")))
+  write_csv(plot_df, file.path(results_dir, paste0("rp_trends_derived_", metric, "_data.csv")))
 
   display_label <- dplyr::recode(metric, K9 = "K/9", BB9 = "BB/9", .default = metric)
 
@@ -262,7 +262,7 @@ for (metric in metrics) {
       axis.text.x = element_text(angle = 45, hjust = 1)
     )
 
-  ggsave(filename = file.path(results_dir, paste0("rp_latent_fit_derived_", metric, ".pdf")),
+  ggsave(filename = file.path(results_dir, paste0("rp_trends_derived_", metric, ".pdf")),
          plot = p, width = 18, height = 12)
 }
 
