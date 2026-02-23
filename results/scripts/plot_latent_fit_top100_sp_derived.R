@@ -9,12 +9,14 @@ prep_path <- "models/sp_model_inputs.rds"
 input_path <- "data/fangraphs_pitchers_2018_2025.csv"
 atc_ip_path <- "data/atc_ip_projections_2026.csv"
 results_dir <- "results/plots/trends/pitchers/starters"
+ppd_seed <- as.integer(Sys.getenv("SP_PPD_SEED", "123"))
 
 if (!dir.exists("results")) dir.create("results")
 if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)
 
 fit <- readRDS(fit_path)
 prep <- readRDS(prep_path)
+set.seed(ppd_seed)
 raw <- read_csv(input_path, show_col_types = FALSE) %>%
   mutate(Season = as.integer(Season)) %>%
   filter(Season >= 2018, Season <= 2025) %>%
@@ -47,11 +49,12 @@ raw <- raw %>%
   mutate(
     age_c = (Age - age_mean) / age_sd,
     age2 = age_c^2,
-    player_id = as.integer(factor(playerid, levels = sort(unique(playerid)))),
+    player_id = match(as.integer(playerid), prep$player_lookup$playerid),
+    year_id = match(Season, prep$years),
     row_id = row_number()
   )
-
-years <- sort(unique(raw$Season))
+raw <- raw %>%
+  filter(!is.na(player_id), !is.na(year_id), !is.na(IP), IP > 0)
 
 post <- rstan::extract(fit)
 beta <- post$beta
@@ -59,6 +62,18 @@ u_player <- post$u_player
 year_effect <- post$year_effect
 n_iter <- dim(beta)[1]
 K <- dim(beta)[3]
+J_player <- dim(u_player)[3]
+
+get_or_default <- function(x, default) {
+  if (is.null(x)) return(default)
+  x
+}
+
+beta_stuff_lat <- get_or_default(post$beta_stuff_lat, matrix(0, nrow = n_iter, ncol = 3))
+beta_location_lat <- get_or_default(post$beta_location_lat, matrix(0, nrow = n_iter, ncol = 3))
+beta_stuff_out <- get_or_default(post$beta_stuff_out, matrix(0, nrow = n_iter, ncol = K))
+beta_location_out <- get_or_default(post$beta_location_out, matrix(0, nrow = n_iter, ncol = K))
+u_player_plv <- get_or_default(post$u_player_plv, array(0, dim = c(n_iter, J_player, 4)))
 
 summarize_draws <- function(x) {
   c(
@@ -80,7 +95,7 @@ Z_player_obs <- cbind(
 )
 
 player_id <- raw$player_id
-year_id <- match(raw$Season, years)
+year_id <- raw$year_id
 
 eta_obs <- function(i) {
   x_i <- X_obs[i, ]
@@ -100,6 +115,13 @@ eta_obs <- function(i) {
   for (k in 1:K) {
     eta[, k] <- eta[, k] + year_effect[, k, yid]
   }
+  stuff_lat <- beta_stuff_lat[, 1] + beta_stuff_lat[, 2] * x_i[2] + beta_stuff_lat[, 3] * x_i[3] +
+    u_player_plv[, pid, 1] + x_i[2] * u_player_plv[, pid, 2]
+  location_lat <- beta_location_lat[, 1] + beta_location_lat[, 2] * x_i[2] + beta_location_lat[, 3] * x_i[3] +
+    u_player_plv[, pid, 3] + x_i[2] * u_player_plv[, pid, 4]
+  for (k in 1:K) {
+    eta[, k] <- eta[, k] + beta_stuff_out[, k] * stuff_lat + beta_location_out[, k] * location_lat
+  }
   eta
 }
 
@@ -116,12 +138,18 @@ proj <- proj_all[keep_idx, ]
 
 eta_pred <- post$eta_pred
 rate_pred <- exp(eta_pred[, keep_idx, , drop = FALSE])
+ip_pred <- matrix(rep(proj$IP_atc, each = n_iter), nrow = n_iter)
+
+so_count_pred <- matrix(rpois(length(ip_pred), rate_pred[, , 1] * ip_pred), nrow = n_iter)
+bb_count_pred <- matrix(rpois(length(ip_pred), rate_pred[, , 2] * ip_pred), nrow = n_iter)
+h_count_pred <- matrix(rpois(length(ip_pred), rate_pred[, , 3] * ip_pred), nrow = n_iter)
+er_count_pred <- matrix(rpois(length(ip_pred), rate_pred[, , 4] * ip_pred), nrow = n_iter)
 
 metric_draws <- list(
-  ERA = rate_pred[, , 4] * 9,
-  K9 = rate_pred[, , 1] * 9,
-  BB9 = rate_pred[, , 2] * 9,
-  WHIP = rate_pred[, , 2] + rate_pred[, , 3]
+  ERA = (er_count_pred / ip_pred) * 9,
+  K9 = (so_count_pred / ip_pred) * 9,
+  BB9 = (bb_count_pred / ip_pred) * 9,
+  WHIP = (bb_count_pred + h_count_pred) / ip_pred
 )
 
 proj_summaries <- lapply(metric_draws, function(mat) {
@@ -170,13 +198,17 @@ for (metric in metrics) {
     eta <- eta_obs(subset$row_id[i])
     rate <- exp(eta)
     ip <- subset$IP[i]
+    so_count <- rpois(n_iter, rate[, 1] * ip)
+    bb_count <- rpois(n_iter, rate[, 2] * ip)
+    h_count <- rpois(n_iter, rate[, 3] * ip)
+    er_count <- rpois(n_iter, rate[, 4] * ip)
 
     draws <- switch(
       metric,
-      ERA = rate[, 4] * 9,
-      K9 = rate[, 1] * 9,
-      BB9 = rate[, 2] * 9,
-      WHIP = rate[, 2] + rate[, 3]
+      ERA = (er_count / ip) * 9,
+      K9 = (so_count / ip) * 9,
+      BB9 = (bb_count / ip) * 9,
+      WHIP = (bb_count + h_count) / ip
     )
     summaries[[i]] <- summarize_draws(draws)
   }

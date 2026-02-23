@@ -6,6 +6,7 @@ suppressPackageStartupMessages({
 proj_path <- "results/projections/pitchers/sp_category_projections_2026.csv"
 atc_ip_path <- "data/atc_ip_projections_2026.csv"
 out_path <- "results/projections/pitchers/sp_composite_projections_2026.csv"
+unc_path <- "results/projections/pitchers/sp_composite_rank_2026.csv"
 
 proj <- read_csv(proj_path, show_col_types = FALSE) %>%
   mutate(playerid = as.character(playerid))
@@ -45,7 +46,7 @@ proj <- proj %>%
     K9 = SO_mean * 9,
     WHIP = BB_mean + H_mean,
     Ks = SO_mean * IP_atc,
-    WQS = W_mean + QS_mean
+    WQS = (W_mean + QS_mean) * IP_atc
   )
 
 zscore <- function(x) (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
@@ -59,6 +60,31 @@ proj <- proj %>%
     z_WQS = zscore(WQS),
     composite = (z_ERA + z_Ks + z_WHIP + z_IP + z_WQS) / 5
   )
+
+if (file.exists(unc_path)) {
+  unc <- read_csv(unc_path, show_col_types = FALSE) %>%
+    mutate(playerid = as.character(playerid)) %>%
+    select(
+      playerid,
+      z_ERA = z_ERA_p50,
+      z_Ks = z_Ks_p50,
+      z_WHIP = z_WHIP_p50,
+      z_IP = z_IP_p50,
+      z_WQS = z_WQS_p50,
+      composite = composite_p50
+    )
+  proj <- proj %>%
+    left_join(unc, by = "playerid", suffix = c("", "_unc")) %>%
+    mutate(
+      z_ERA = coalesce(z_ERA_unc, z_ERA),
+      z_Ks = coalesce(z_Ks_unc, z_Ks),
+      z_WHIP = coalesce(z_WHIP_unc, z_WHIP),
+      z_IP = coalesce(z_IP_unc, z_IP),
+      z_WQS = coalesce(z_WQS_unc, z_WQS),
+      composite = coalesce(composite_unc, composite)
+    ) %>%
+    select(-ends_with("_unc"))
+}
 
 write_csv(
   proj %>%

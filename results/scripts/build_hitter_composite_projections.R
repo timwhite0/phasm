@@ -3,6 +3,7 @@ library(dplyr)
 
 proj <- read_csv('results/projections/batters/category_projections_2026.csv', show_col_types = FALSE)
 atc <- read_csv('data/atc_pa_projections_2026.csv', show_col_types = FALSE)
+unc_path <- 'results/projections/batters/composite_rank_2026.csv'
 
 need_cols <- c('playerid','PlayerName','position',
                'HR_mean','R_mean','RBI_mean','SB_mean','OBP_mean','SLG_mean')
@@ -44,10 +45,10 @@ vals <- proj %>%
     Team,
     position,
     PA_atc,
-    HR = HR_mean * PA_atc,
-    R = R_mean * PA_atc,
-    RBI = RBI_mean * PA_atc,
-    SB = SB_mean * PA_atc,
+    HR = ifelse(!is.na(HR_mean_t), HR_mean_t, HR_mean * PA_atc),
+    R = ifelse(!is.na(R_mean_t), R_mean_t, R_mean * PA_atc),
+    RBI = ifelse(!is.na(RBI_mean_t), RBI_mean_t, RBI_mean * PA_atc),
+    SB = ifelse(!is.na(SB_mean_t), SB_mean_t, SB_mean * PA_atc),
     OBP = OBP_mean,
     SLG = SLG_mean
   )
@@ -69,6 +70,33 @@ vals_z <- vals %>%
     z_SLG = zscore(SLG)
   ) %>%
   mutate(composite_zscore = (z_HR + z_R + z_RBI + z_SB + z_OBP + z_SLG) / 6)
+
+if (file.exists(unc_path)) {
+  unc <- read_csv(unc_path, show_col_types = FALSE) %>%
+    mutate(playerid = as.character(playerid)) %>%
+    select(
+      playerid,
+      z_HR = z_HR_p50,
+      z_R = z_R_p50,
+      z_RBI = z_RBI_p50,
+      z_SB = z_SB_p50,
+      z_OBP = z_OBP_p50,
+      z_SLG = z_SLG_p50,
+      composite_zscore = composite_p50
+    )
+  vals_z <- vals_z %>%
+    left_join(unc, by = "playerid", suffix = c("", "_unc")) %>%
+    mutate(
+      z_HR = coalesce(z_HR_unc, z_HR),
+      z_R = coalesce(z_R_unc, z_R),
+      z_RBI = coalesce(z_RBI_unc, z_RBI),
+      z_SB = coalesce(z_SB_unc, z_SB),
+      z_OBP = coalesce(z_OBP_unc, z_OBP),
+      z_SLG = coalesce(z_SLG_unc, z_SLG),
+      composite_zscore = coalesce(composite_zscore_unc, composite_zscore)
+    ) %>%
+    select(-ends_with("_unc"))
+}
 
 out <- vals_z %>%
   select(playerid, PlayerName, Team, position, PA_atc, composite_zscore,

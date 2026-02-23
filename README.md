@@ -10,6 +10,8 @@ projections when paired with external PA/IP forecasts.
 Category projection outputs include posterior mean and quantiles (p05, p50, p95). Count outcomes are also
 stored as totals using ATC PA/IP (e.g., H_mean_t, Ks_mean, W_mean_t, SVHLD_mean_t).
 Projection and composite outputs also carry 2026 `Team` from ATC projection files.
+Composite projection files now default to the uncertainty-based method: per-draw category z-scores are
+combined into per-draw composite scores, and the stored composite/z-score columns use posterior medians.
 
 ## What this does
 - Fits a joint multivariate Bayesian model (rstan) for H, R, RBI, HR, SB (per-PA rates) plus AVG, OBP, SLG.
@@ -57,6 +59,7 @@ Projection and composite outputs also carry 2026 `Team` from ATC projection file
 
 ## Covariates used
 - Age (standardized) and age^2
+- Hitter latent Statcast covariates: EV/LA (standardized) plus BarrelPct/HardHitPct (logit scale), each measured with error using batted-ball `Events`
 - Hitter position indicators
 - RP `role_leverage` indicator for SVHLD (fixed effect)
 
@@ -76,13 +79,13 @@ Projection and composite outputs also carry 2026 `Team` from ATC projection file
 - If that summary file is missing or invalid, RP fitting falls back to legacy priors (including the tighter SVHLD-specific priors).
 
 ### Empirical-Bayes priors (all models)
-- EB summaries are fit on 2013-2017 data and used as defaults for all main model fits (hitters, SP, RP).
+- EB summaries are fit on historical data and used as defaults for all main model fits (hitters, SP, RP).
 - EB summary generation scripts:
-  - Hitters: `results/scripts/fit_batter_eb_2013_2017.R` -> `results/prior_predictive/batter_prior_summary.csv`
-  - SP: `results/scripts/fit_sp_eb_2013_2017.R` -> `results/prior_predictive/sp_prior_summary.csv`
-  - RP: `results/scripts/fit_rp_eb_2013_2017.R` -> `results/prior_predictive/rp_prior_summary.csv`
+  - Hitters: `models/eb/fit_batter_eb_2015_2017.R` -> `results/prior_predictive/batter_prior_summary.csv`
+  - SP: `models/eb/fit_sp_eb_2013_2017.R` -> `results/prior_predictive/sp_prior_summary.csv`
+  - RP: `models/eb/fit_rp_eb_2013_2017.R` -> `results/prior_predictive/rp_prior_summary.csv`
 - EB training data:
-  - Hitters: `data/fangraphs_batters_2013_2017.csv`
+  - Hitters: `data/fangraphs_batters_2015_2017.csv`
   - Pitchers: `data/fangraphs_pitchers_2013_2017.csv` with model-specific SP/RP filters matching each main fit.
 - EB summaries store posterior mean/sd/quantiles for prior hyperparameters used by the corresponding main model.
 - Main fit scripts (`models/fit_hitter_model.R`, `models/fit_sp_model.R`, `models/fit_rp_model.R`) use EB posterior means as prior centers and EB posterior sds as prior scales (with small lower bounds for numerical stability), then pass those values into Stan via data.
@@ -101,6 +104,8 @@ use IP instead of PA for the offset, and model:
   - `Rscript -e "shiny::runApp('dashboard', port = 3838, launch.browser = TRUE)"`
 - Composite ranking tabs support both position/role filters and `Team` filters.
 - Projection tabs support `Team` filters (and hitter position filter).
+- Composite tabs display posterior median z-scores from the uncertainty-based composite procedure
+  (column names are unchanged for app compatibility).
 
 ### Notation
 - Players $i = 1..I$, positions $p = 1..P$, years $y = 1..Y$
@@ -190,4 +195,4 @@ $$
 - Year AR(1) parameters: $\rho_k \sim \mathcal{N}(0, 0.5)$, $\sigma_{\text{year},k} \sim \mathcal{N}^+(0, 1)$
 - Continuous outcome noise: $\sigma_k \sim \mathcal{N}^+(0, 1)$
 
-In production fits, each model (hitters/SP/RP) defaults to EB-informed priors from its 2013-2017 summary file. The distributions above are the legacy fallback priors used if EB summaries are unavailable or invalid.
+In production fits, each model (hitters/SP/RP) defaults to EB-informed priors from its summary file. The distributions above are the legacy fallback priors used if EB summaries are unavailable or invalid.

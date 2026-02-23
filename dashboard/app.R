@@ -315,14 +315,17 @@ server <- function(input, output, session) {
       tags$ul(
         tags$li("Estimates latent player skill trajectories over time with shared year effects."),
         tags$li("Produces 2026 projections and uncertainty intervals (5th/95th percentiles) for each outcome."),
-        tags$li("Builds composite rankings from category z-scores for hitters, starters, and relievers."),
+        tags$li("Builds composite rankings from draw-wise category z-scores; composite ranking tabs display posterior median z-scores."),
         tags$li("Carries 2026 Team from ATC projections into projection/composite outputs and app tables.")
       ),
       tags$div(style = "height: 12px;"),
       tags$h4(tags$strong("Covariates used")),
       tags$ul(
+        tags$li("Age and age^2 effects across hitter and pitcher outcome models."),
         tags$li("Hitter position indicators."),
-        tags$li("Pitcher role indicators (SP/RP) with separate models."),
+        tags$li("Hitter latent Statcast covariates: EV, LA, BarrelPct, HardHitPct (with measurement error using Events)."),
+        tags$li("Pitcher latent PLV covariates: Stuff+ and Location+ (with missing pre-2020 handled via latent process)."),
+        tags$li("Pitcher role separation via distinct SP and RP models."),
         tags$li("Reliever leverage indicator (role_leverage)."),
         tags$li("Year effects shared across players.")
       ),
@@ -330,6 +333,7 @@ server <- function(input, output, session) {
       tags$h4(tags$strong("SP model notes")),
       tags$ul(
         tags$li("Starter outcomes include SO, BB, H, ER, W, and QS."),
+        tags$li("SP model is SP-only and fit on 2018-2025 seasons."),
         tags$li("Composite starter rankings use z-scores, including Ks (not K/9).")
       ),
       tags$div(style = "height: 12px;"),
@@ -337,12 +341,13 @@ server <- function(input, output, session) {
       tags$ul(
         tags$li("Reliever outcomes include SO, BB, H, ER, W, and SVHLD."),
         tags$li("role_leverage is a binary covariate that captures high-leverage usage."),
+        tags$li("RP fit excludes pitchers with ATC-projected GS >= 1 and keeps pitchers whose latest observed role is RP."),
         tags$li("RP priors default to empirical-Bayes summaries from results/prior_predictive/rp_prior_summary.csv.")
       ),
       tags$div(style = "height: 12px;"),
       tags$h4(tags$strong("Empirical-Bayes prior flow (all models)")),
       tags$ul(
-        tags$li("EB summaries are fit on 2013-2017 data for hitters, starters, and relievers."),
+        tags$li("EB summaries are fit on 2015-2017 for hitters, and 2013-2017 for starters/relievers."),
         tags$li("Default summary files are batter_prior_summary.csv, sp_prior_summary.csv, and rp_prior_summary.csv in results/prior_predictive/."),
         tags$li("Main fits use EB posterior means as prior centers and EB posterior sds as prior scales."),
         tags$li("If an EB summary is missing or invalid, that model falls back to legacy priors with a log message."),

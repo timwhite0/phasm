@@ -6,6 +6,7 @@ suppressPackageStartupMessages({
 proj_path <- "results/projections/pitchers/rp_category_projections_2026.csv"
 atc_ip_path <- "data/atc_ip_projections_2026.csv"
 out_path <- "results/projections/pitchers/rp_composite_projections_2026.csv"
+unc_path <- "results/projections/pitchers/rp_composite_rank_2026.csv"
 
 proj <- read_csv(proj_path, show_col_types = FALSE) %>%
   mutate(playerid = as.character(playerid))
@@ -60,6 +61,33 @@ proj <- proj %>%
     z_SVH = zscore(SVH),
     composite = (z_ERA + z_WHIP + z_IP + z_W + z_Ks + z_SVH) / 6
   )
+
+if (file.exists(unc_path)) {
+  unc <- read_csv(unc_path, show_col_types = FALSE) %>%
+    mutate(playerid = as.character(playerid)) %>%
+    select(
+      playerid,
+      z_ERA = z_ERA_p50,
+      z_WHIP = z_WHIP_p50,
+      z_IP = z_IP_p50,
+      z_W = z_W_p50,
+      z_Ks = z_Ks_p50,
+      z_SVH = z_SVH_p50,
+      composite = composite_p50
+    )
+  proj <- proj %>%
+    left_join(unc, by = "playerid", suffix = c("", "_unc")) %>%
+    mutate(
+      z_ERA = coalesce(z_ERA_unc, z_ERA),
+      z_WHIP = coalesce(z_WHIP_unc, z_WHIP),
+      z_IP = coalesce(z_IP_unc, z_IP),
+      z_W = coalesce(z_W_unc, z_W),
+      z_Ks = coalesce(z_Ks_unc, z_Ks),
+      z_SVH = coalesce(z_SVH_unc, z_SVH),
+      composite = coalesce(composite_unc, composite)
+    ) %>%
+    select(-ends_with("_unc"))
+}
 
 write_csv(
   proj %>%

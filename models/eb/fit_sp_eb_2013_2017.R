@@ -12,10 +12,9 @@ message(sprintf("detectCores=%d, mc.cores=%d", cores, getOption("mc.cores")))
 
 # Config
 input_path <- "data/fangraphs_pitchers_2013_2017.csv"
-atc_ip_path <- "data/atc_ip_projections_2026.csv"
-stan_path <- "models/rp_model.stan"
-output_fit_path <- "models/rp_eb_2013_2017_fit.rds"
-output_summary_path <- "results/prior_predictive/rp_prior_summary.csv"
+stan_path <- "models/sp_model.stan"
+output_fit_path <- "models/sp_eb_2013_2017_fit.rds"
+output_summary_path <- "results/prior_predictive/sp_prior_summary.csv"
 
 chains <- 2
 iter <- 2500
@@ -26,20 +25,23 @@ subset_players <- 0
 use_existing_fit <- as.integer(Sys.getenv("USE_EXISTING_FIT", "0"))
 
 # Outcomes per IP
-count_outcomes <- c("SO", "BB", "H", "ER", "W", "SVHLD")
+count_outcomes <- c("SO", "BB", "H", "ER", "W", "QS")
 zip_outcomes <- character(0)
-svhld_idx <- match("SVHLD", count_outcomes)
+plv_covars <- c("StuffPlus", "LocationPlus", "BF")
 
 # Load data
 raw <- read_csv(input_path, show_col_types = FALSE)
 
+for (v in plv_covars) {
+  if (!v %in% names(raw)) raw[[v]] <- NA_real_
+}
+
 # Basic cleaning
 raw <- raw %>%
   mutate(Season = as.integer(Season)) %>%
-  filter(Season >= 2013, Season <= 2017) %>%
-  mutate(SVHLD = SV + HLD)
+  filter(Season >= 2013, Season <= 2017)
 
-# Keep pitchers whose most recent season is RP
+# Keep pitchers whose most recent season is SP
 latest_role <- raw %>%
   group_by(playerid) %>%
   slice_max(order_by = Season, n = 1, with_ties = FALSE) %>%
@@ -48,25 +50,9 @@ latest_role <- raw %>%
 
 raw <- raw %>%
   left_join(latest_role, by = "playerid") %>%
-  filter(latest_role == "RP") %>%
-  filter(Role == "RP") %>%
+  filter(latest_role == "SP") %>%
+  filter(Role == "SP") %>%
   select(-latest_role)
-
-# Filter out projected starters (ATC GS >= 1) before fitting RP model
-atc <- read_csv(atc_ip_path, show_col_types = FALSE)
-id_col <- if ("playerid" %in% names(atc)) "playerid" else if ("PlayerId" %in% names(atc)) "PlayerId" else if ("player_id" %in% names(atc)) "player_id" else NA_character_
-gs_col <- if ("GS" %in% names(atc)) "GS" else if ("gs" %in% names(atc)) "gs" else NA_character_
-if (is.na(id_col) || is.na(gs_col)) {
-  stop("ATC IP file must include playerid and GS columns: ", atc_ip_path)
-}
-starter_ids <- atc %>%
-  transmute(playerid = as.character(.data[[id_col]]), GS = as.numeric(.data[[gs_col]])) %>%
-  filter(!is.na(playerid), !is.na(GS), GS >= 1) %>%
-  pull(playerid) %>%
-  unique()
-if (length(starter_ids) > 0) {
-  raw <- raw %>% filter(!playerid %in% starter_ids)
-}
 
 # Optional subset for faster testing
 if (!is.na(subset_players) && subset_players > 0) {
@@ -83,6 +69,28 @@ raw <- raw %>%
   mutate(
     age_c = (Age - age_mean) / age_sd,
     age2 = age_c^2
+  )
+
+raw <- raw %>%
+  mutate(
+    StuffPlus = suppressWarnings(as.numeric(StuffPlus)),
+    LocationPlus = suppressWarnings(as.numeric(LocationPlus)),
+    BF = suppressWarnings(as.numeric(BF))
+  )
+
+for (v in c("StuffPlus", "LocationPlus")) {
+  mu <- mean(raw[[v]], na.rm = TRUE)
+  sdv <- sd(raw[[v]], na.rm = TRUE)
+  if (is.na(mu)) mu <- 0
+  if (is.na(sdv) || sdv == 0) sdv <- 1
+  raw[[paste0(v, "_z")]] <- (dplyr::coalesce(raw[[v]], mu) - mu) / sdv
+}
+
+raw <- raw %>%
+  mutate(
+    has_plv = as.integer(Season >= 2020 & !is.na(StuffPlus) & !is.na(LocationPlus)),
+    plv_exposure = dplyr::coalesce(BF, 3 * IP, 1),
+    plv_exposure = pmax(plv_exposure, 1)
   )
 
 # Rebuild IDs after filtering
@@ -105,19 +113,13 @@ Z_player <- cbind(
   age_c = raw$age_c
 )
 
-# Prior settings (outcome-specific defaults)
+# Prior settings (legacy baseline)
 beta_mean <- matrix(0, nrow = ncol(X), ncol = length(count_outcomes))
 beta_sd <- matrix(2.5, nrow = ncol(X), ncol = length(count_outcomes))
 sigma_player_sd <- rep(1, length(count_outcomes))
 sigma_year_sd <- rep(1, length(count_outcomes))
-
-# Tighten SVHLD priors
-if (!is.na(svhld_idx)) {
-  beta_mean[1, svhld_idx] <- log(0.20)
-  beta_sd[, svhld_idx] <- 0.5
-  sigma_player_sd[svhld_idx] <- 0.2
-  sigma_year_sd[svhld_idx] <- 0.05
-}
+rho_year_mean <- rep(0, length(count_outcomes))
+rho_year_sd <- rep(0.5, length(count_outcomes))
 
 # Outcomes
 count_mat <- raw %>%
@@ -132,7 +134,7 @@ year_id <- match(raw$Season, years)
 # Offset (rate per IP)
 offset_log_ip <- log(pmax(raw$IP, 1))
 
-# Minimal prediction set (use latest season per player, no closer list)
+# Minimal prediction set (latest season per player)
 latest_by_player <- raw %>%
   group_by(playerid) %>%
   slice_max(order_by = Season, n = 1, with_ties = FALSE) %>%
@@ -173,26 +175,29 @@ stan_data <- list(
   Z_player = Z_player,
   K_zip = length(zip_outcomes),
   zip_idx = match(zip_outcomes, count_outcomes),
-  k_svhld = match("SVHLD", count_outcomes),
-  role_leverage = as.numeric(raw$role_leverage),
   beta_mean = beta_mean,
   beta_sd = beta_sd,
   sigma_player_sd = sigma_player_sd,
   sigma_year_sd = sigma_year_sd,
   beta_zip_sd = rep(1.0, length(zip_outcomes)),
+  rho_year_mean = rho_year_mean,
+  rho_year_sd = rho_year_sd,
   J_player = length(unique(raw$player_id)),
   J_year = length(years),
   player_id = raw$player_id,
   year_id = year_id,
   y_count = count_mat,
   offset_log_ip = offset_log_ip,
+  stuff_obs_z = raw$StuffPlus_z,
+  location_obs_z = raw$LocationPlus_z,
+  plv_exposure = raw$plv_exposure,
+  has_plv = raw$has_plv,
   N_pred = nrow(latest_by_player),
   X_pred = X_pred,
   Z_player_pred = Z_player_pred,
   player_id_pred = player_id_pred,
   year_id_pred = year_id_pred,
-  offset_log_ip_pred = offset_log_ip_pred,
-  role_leverage_pred = as.numeric(latest_by_player$role_leverage)
+  offset_log_ip_pred = offset_log_ip_pred
 )
 
 if (!is.na(use_existing_fit) && use_existing_fit == 1 && file.exists(output_fit_path)) {
@@ -256,7 +261,7 @@ summarize_vector_param <- function(arr, labels, param) {
 
 draws <- rstan::extract(
   fit,
-  pars = c("beta", "sigma_player", "sigma_year", "rho_year", "beta_role_svhld")
+  pars = c("beta", "sigma_player", "sigma_year", "rho_year")
 )
 
 beta_labels <- colnames(X)
@@ -267,13 +272,7 @@ summary_tbl <- bind_rows(
   summarize_array(draws$beta, beta_labels, outcome_labels, "beta"),
   summarize_array(draws$sigma_player, player_re_labels, outcome_labels, "sigma_player"),
   summarize_vector_param(draws$sigma_year, outcome_labels, "sigma_year"),
-  summarize_vector_param(draws$rho_year, outcome_labels, "rho_year"),
-  tibble(
-    param = "beta_role_svhld",
-    dim1 = NA_character_,
-    dim2 = NA_character_,
-    !!!as.list(summarize_vec(draws$beta_role_svhld))
-  )
+  summarize_vector_param(draws$rho_year, outcome_labels, "rho_year")
 )
 
 if (!dir.exists("results/prior_predictive")) {

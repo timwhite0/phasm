@@ -4,3 +4,6 @@
 .DS_Store
 *.dcf
 prior_predictive
+.Rhistory
+tmp*
+*draft_top10_md*

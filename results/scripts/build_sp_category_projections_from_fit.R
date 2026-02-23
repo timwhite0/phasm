@@ -8,11 +8,14 @@ fit_path <- "models/sp_model_fit.rds"
 prep_path <- "models/sp_model_inputs.rds"
 output_projection_path <- "results/projections/pitchers/sp_category_projections_2026.csv"
 atc_ip_path <- "data/atc_ip_projections_2026.csv"
+ppd_seed <- as.integer(Sys.getenv("SP_PPD_SEED", "123"))
+ip_cv <- as.numeric(Sys.getenv("SP_IP_ATC_CV", "0.10"))
 
 count_outcomes <- c("SO", "BB", "H", "ER", "W", "QS")
 
 fit <- readRDS(fit_path)
 prep <- readRDS(prep_path)
+set.seed(ppd_seed)
 
 player_lookup <- prep$player_lookup %>%
   mutate(
@@ -25,6 +28,18 @@ pick_col <- function(df, candidates) {
   hit <- candidates[candidates %in% names(df)]
   if (length(hit) == 0) return(NULL)
   hit[[1]]
+}
+
+sample_ip_draws <- function(ip_vec, n_draw, cv) {
+  if (!is.finite(cv) || cv <= 0) {
+    return(matrix(rep(ip_vec, each = n_draw), nrow = n_draw))
+  }
+  shape <- 1 / (cv^2)
+  scale_vec <- ip_vec / shape
+  matrix(
+    rgamma(n_draw * length(ip_vec), shape = shape, scale = rep(scale_vec, each = n_draw)),
+    nrow = n_draw
+  )
 }
 
 atc <- read_csv(atc_ip_path, show_col_types = FALSE)
@@ -42,11 +57,46 @@ atc <- atc %>%
   ) %>%
   filter(!is.na(playerid), !is.na(IP_atc))
 
+proj <- player_lookup %>%
+  left_join(atc, by = "playerid") %>%
+  filter(!is.na(IP_atc), IP_atc > 0)
+
+if (nrow(proj) == 0) {
+  stop("No projected players with positive IP_atc.")
+}
+
 eta_pred <- rstan::extract(fit, pars = "eta_pred")$eta_pred
+n_draw <- dim(eta_pred)[1]
+
 rate_count <- exp(eta_pred)
-bb_draws <- rate_count[, , match("BB", count_outcomes)]
-h_draws <- rate_count[, , match("H", count_outcomes)]
-whip_draws <- bb_draws + h_draws
+lookup_ids <- as.character(prep$player_lookup$playerid)
+keep_idx <- match(proj$playerid, lookup_ids)
+if (any(is.na(keep_idx))) {
+  stop("Could not align projected player ids to eta_pred indices.")
+}
+
+n_player <- length(keep_idx)
+ip_mat <- sample_ip_draws(proj$IP_atc, n_draw, ip_cv)
+
+draw_poisson <- function(rate_mat, exposure_mat) {
+  lambda <- rate_mat * exposure_mat
+  matrix(rpois(length(lambda), lambda), nrow = nrow(rate_mat), ncol = ncol(rate_mat))
+}
+
+so_count <- draw_poisson(rate_count[, keep_idx, match("SO", count_outcomes)], ip_mat)
+bb_count <- draw_poisson(rate_count[, keep_idx, match("BB", count_outcomes)], ip_mat)
+h_count <- draw_poisson(rate_count[, keep_idx, match("H", count_outcomes)], ip_mat)
+er_count <- draw_poisson(rate_count[, keep_idx, match("ER", count_outcomes)], ip_mat)
+w_count <- draw_poisson(rate_count[, keep_idx, match("W", count_outcomes)], ip_mat)
+qs_count <- draw_poisson(rate_count[, keep_idx, match("QS", count_outcomes)], ip_mat)
+
+so_rate_ppd <- so_count / ip_mat
+bb_rate_ppd <- bb_count / ip_mat
+h_rate_ppd <- h_count / ip_mat
+er_rate_ppd <- er_count / ip_mat
+w_rate_ppd <- w_count / ip_mat
+qs_rate_ppd <- qs_count / ip_mat
+whip_draws <- bb_rate_ppd + h_rate_ppd
 
 summarize_draws <- function(draws_mat) {
   tibble(
@@ -57,17 +107,31 @@ summarize_draws <- function(draws_mat) {
   )
 }
 
-proj <- player_lookup %>%
-  left_join(atc, by = "playerid")
-for (k in seq_along(count_outcomes)) {
-  summary_k <- summarize_draws(rate_count[, , k])
-  names(summary_k) <- paste0(count_outcomes[k], "_", names(summary_k))
+summary_map <- list(
+  SO = so_rate_ppd,
+  BB = bb_rate_ppd,
+  H = h_rate_ppd,
+  ER = er_rate_ppd,
+  W = w_rate_ppd,
+  QS = qs_rate_ppd
+)
+
+for (nm in names(summary_map)) {
+  summary_k <- summarize_draws(summary_map[[nm]])
+  names(summary_k) <- paste0(nm, "_", names(summary_k))
   proj <- bind_cols(proj, summary_k)
 }
 
 whip_summary <- summarize_draws(whip_draws)
 names(whip_summary) <- paste0("WHIP_", names(whip_summary))
-proj <- bind_cols(proj, whip_summary)
+ks_summary <- summarize_draws(so_count)
+names(ks_summary) <- paste0("Ks_", names(ks_summary))
+w_total_summary <- summarize_draws(w_count)
+names(w_total_summary) <- c("W_mean_t", "W_p05_t", "W_p50_t", "W_p95_t")
+qs_total_summary <- summarize_draws(qs_count)
+names(qs_total_summary) <- c("QS_mean_t", "QS_p05_t", "QS_p50_t", "QS_p95_t")
+
+proj <- bind_cols(proj, whip_summary, ks_summary, w_total_summary, qs_total_summary)
 
 proj <- proj %>%
   mutate(
@@ -82,19 +146,7 @@ proj <- proj %>%
     BB9_mean = BB_mean * 9,
     BB9_p05 = BB_p05 * 9,
     BB9_p50 = BB_p50 * 9,
-    BB9_p95 = BB_p95 * 9,
-    Ks_mean = SO_mean * IP_atc,
-    Ks_p05 = SO_p05 * IP_atc,
-    Ks_p50 = SO_p50 * IP_atc,
-    Ks_p95 = SO_p95 * IP_atc,
-    W_mean_t = W_mean * IP_atc,
-    W_p05_t = W_p05 * IP_atc,
-    W_p50_t = W_p50 * IP_atc,
-    W_p95_t = W_p95 * IP_atc,
-    QS_mean_t = QS_mean * IP_atc,
-    QS_p05_t = QS_p05 * IP_atc,
-    QS_p50_t = QS_p50 * IP_atc,
-    QS_p95_t = QS_p95 * IP_atc
+    BB9_p95 = BB_p95 * 9
   )
 
 write_csv(proj, output_projection_path)

@@ -7,15 +7,18 @@ suppressPackageStartupMessages({
 })
 
 fit_path <- "models/rp_model_fit.rds"
+eta_pred_path <- Sys.getenv("RP_ETA_PRED_PATH", "models/rp_eta_pred_2026.rds")
 prep_path <- "models/rp_model_inputs.rds"
 atc_ip_path <- "data/atc_ip_projections_2026.csv"
 results_dir <- "results/plots/interval_projections/pitchers/relievers"
+ppd_seed <- as.integer(Sys.getenv("RP_PPD_SEED", "123"))
+ip_cv <- as.numeric(Sys.getenv("RP_IP_ATC_CV", "0.15"))
 
 if (!dir.exists("results")) dir.create("results")
 if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)
 
-fit <- readRDS(fit_path)
 prep <- readRDS(prep_path)
+set.seed(ppd_seed)
 
 atc <- read_csv(atc_ip_path, show_col_types = FALSE)
 
@@ -23,6 +26,18 @@ pick_col <- function(df, candidates) {
   hit <- candidates[candidates %in% names(df)]
   if (length(hit) == 0) return(NULL)
   hit[[1]]
+}
+
+sample_ip_draws <- function(ip_vec, n_draw, cv) {
+  if (!is.finite(cv) || cv <= 0) {
+    return(matrix(rep(ip_vec, each = n_draw), nrow = n_draw))
+  }
+  shape <- 1 / (cv^2)
+  scale_vec <- ip_vec / shape
+  matrix(
+    rgamma(n_draw * length(ip_vec), shape = shape, scale = rep(scale_vec, each = n_draw)),
+    nrow = n_draw
+  )
 }
 
 id_col <- pick_col(atc, c("playerid", "PlayerId", "player_id"))
@@ -42,29 +57,46 @@ proj_all <- prep$player_lookup %>%
   mutate(playerid = as.character(playerid)) %>%
   left_join(atc, by = "playerid")
 
-keep_idx <- which(!is.na(proj_all$IP_atc))
+keep_idx <- which(!is.na(proj_all$IP_atc) & proj_all$IP_atc > 0)
 if (length(keep_idx) == 0) {
   stop("No ATC IP matches found for 2026 projections.")
 }
 
 proj <- proj_all[keep_idx, ]
 
-post <- rstan::extract(fit)
-eta_pred <- post$eta_pred
+if (file.exists(eta_pred_path)) {
+  eta_obj <- readRDS(eta_pred_path)
+  eta_pred <- eta_obj$eta_pred
+} else {
+  fit <- readRDS(fit_path)
+  post <- rstan::extract(fit, pars = "eta_pred")
+  eta_pred <- post$eta_pred
+}
 n_iter <- dim(eta_pred)[1]
 
 rate_pred <- exp(eta_pred[, keep_idx, , drop = FALSE])
+ip_mat <- sample_ip_draws(proj$IP_atc, n_iter, ip_cv)
 
-ip_mat <- matrix(rep(proj$IP_atc, each = n_iter), nrow = n_iter)
+draw_poisson <- function(rate_mat, exposure_mat) {
+  lambda <- rate_mat * exposure_mat
+  matrix(rpois(length(lambda), lambda), nrow = nrow(rate_mat), ncol = ncol(rate_mat))
+}
+
+so_count <- draw_poisson(rate_pred[, , 1], ip_mat)
+bb_count <- draw_poisson(rate_pred[, , 2], ip_mat)
+h_count <- draw_poisson(rate_pred[, , 3], ip_mat)
+er_count <- draw_poisson(rate_pred[, , 4], ip_mat)
+w_count <- draw_poisson(rate_pred[, , 5], ip_mat)
+svhld_count <- draw_poisson(rate_pred[, , 6], ip_mat)
 
 metric_draws <- list(
-  ERA = rate_pred[, , 4] * 9,
-  K9 = rate_pred[, , 1] * 9,
-  BB9 = rate_pred[, , 2] * 9,
-  WHIP = rate_pred[, , 2] + rate_pred[, , 3],
-  Ks = rate_pred[, , 1] * ip_mat,
-  W = rate_pred[, , 5] * ip_mat,
-  SVHLD = rate_pred[, , 6] * ip_mat
+  ERA = (er_count / ip_mat) * 9,
+  K9 = (so_count / ip_mat) * 9,
+  BB9 = (bb_count / ip_mat) * 9,
+  WHIP = (bb_count + h_count) / ip_mat,
+  Ks = so_count,
+  W = w_count,
+  SVHLD = svhld_count
 )
 
 summarize_draws <- function(x) {

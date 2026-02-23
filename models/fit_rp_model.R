@@ -30,11 +30,13 @@ warmup <- as.integer(Sys.getenv("STAN_WARMUP", "500"))
 seed <- as.integer(Sys.getenv("STAN_SEED", "123"))
 refresh <- as.integer(Sys.getenv("STAN_REFRESH", "100"))
 subset_players <- as.integer(Sys.getenv("STAN_SUBSET_PLAYERS", "0"))
+stan_init <- Sys.getenv("STAN_INIT", "")
 
 # Outcomes per IP
 count_outcomes <- c("SO", "BB", "H", "ER", "W", "SVHLD")
 zip_outcomes <- character(0)
 svhld_idx <- match("SVHLD", count_outcomes)
+plv_covars <- c("StuffPlus", "LocationPlus", "BF")
 
 # Load data
 raw <- read_csv(input_path, show_col_types = FALSE)
@@ -44,6 +46,15 @@ raw <- raw %>%
   mutate(Season = as.integer(Season)) %>%
   filter(Season >= 2018, Season <= 2025) %>%
   mutate(SVHLD = SV + HLD)
+
+missing_plv <- setdiff(plv_covars, names(raw))
+if (length(missing_plv) > 0) {
+  stop(
+    "Missing PLV columns in RP input: ",
+    paste(missing_plv, collapse = ", "),
+    ". Rebuild the pitcher dataset first."
+  )
+}
 
 # Keep pitchers whose most recent season is RP
 latest_role <- raw %>%
@@ -108,7 +119,7 @@ fetch_closer_depth_chart <- function(url) {
 closer_roles <- c("Closer", "Co-Closer", "Closer Committee", "Setup Man")
 if (file.exists(closer_cache_path)) {
   closer_list <- read_csv(closer_cache_path, show_col_types = FALSE) %>%
-    rename_with(~ gsub("\\.", "_", .x))
+    rename_with(~ gsub("[^A-Za-z0-9]+", "_", .x))
   # Normalize expected columns from the Fangraphs table export
   if ("PROJECTED_ROLE" %in% names(closer_list)) {
     closer_list <- closer_list %>% rename(ProjectedRole = PROJECTED_ROLE)
@@ -154,6 +165,32 @@ raw <- raw %>%
   mutate(
     age_c = (Age - age_mean) / age_sd,
     age2 = age_c^2
+  )
+
+raw <- raw %>%
+  mutate(
+    StuffPlus = suppressWarnings(as.numeric(StuffPlus)),
+    LocationPlus = suppressWarnings(as.numeric(LocationPlus)),
+    BF = suppressWarnings(as.numeric(BF))
+  )
+
+plv_mean <- setNames(numeric(2), c("StuffPlus", "LocationPlus"))
+plv_sd <- setNames(numeric(2), c("StuffPlus", "LocationPlus"))
+for (v in c("StuffPlus", "LocationPlus")) {
+  mu <- mean(raw[[v]], na.rm = TRUE)
+  sdv <- sd(raw[[v]], na.rm = TRUE)
+  if (is.na(mu)) mu <- 0
+  if (is.na(sdv) || sdv == 0) sdv <- 1
+  plv_mean[[v]] <- mu
+  plv_sd[[v]] <- sdv
+  raw[[paste0(v, "_z")]] <- (dplyr::coalesce(raw[[v]], mu) - mu) / sdv
+}
+
+raw <- raw %>%
+  mutate(
+    has_plv = as.integer(Season >= 2020 & !is.na(StuffPlus) & !is.na(LocationPlus)),
+    plv_exposure = dplyr::coalesce(BF, 3 * IP, 1),
+    plv_exposure = pmax(plv_exposure, 1)
   )
 
 # Rebuild IDs after filtering
@@ -353,6 +390,10 @@ stan_data <- list(
   year_id = year_id,
   y_count = count_mat,
   offset_log_ip = offset_log_ip,
+  stuff_obs_z = raw$StuffPlus_z,
+  location_obs_z = raw$LocationPlus_z,
+  plv_exposure = raw$plv_exposure,
+  has_plv = raw$has_plv,
   N_pred = nrow(latest_by_player),
   X_pred = X_pred,
   Z_player_pred = Z_player_pred,
@@ -368,12 +409,20 @@ saveRDS(
     years = years,
     age_mean = age_mean,
     age_sd = age_sd,
+    plv_mean = plv_mean,
+    plv_sd = plv_sd,
     player_lookup = latest_by_player %>% select(playerid, PlayerName, Role)
   ),
   output_prep_path
 )
 
 if (run_fit) {
+  init_arg <- "random"
+  if (identical(stan_init, "0")) {
+    init_arg <- 0
+    message("Using Stan init = 0")
+  }
+
   fit <- stan(
     file = stan_path,
     data = stan_data,
@@ -382,6 +431,7 @@ if (run_fit) {
     warmup = warmup,
     seed = seed,
     refresh = refresh,
+    init = init_arg,
     control = list(adapt_delta = 0.9, max_treedepth = 12)
   )
   saveRDS(fit, output_fit_path)

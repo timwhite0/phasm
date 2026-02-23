@@ -24,6 +24,10 @@ data {
 
   int<lower=0> y_count[N, K_count];
   vector[N] offset_log_ip;
+  vector[N] stuff_obs_z;
+  vector[N] location_obs_z;
+  vector<lower=1>[N] plv_exposure;
+  array[N] int<lower=0, upper=1> has_plv;
 
   int<lower=1> N_pred;
   matrix[N_pred, P] X_pred;
@@ -46,14 +50,29 @@ parameters {
   matrix[K, J_year] year_effect;
   vector<lower=-1, upper=1>[K] rho_year;
   vector<lower=0>[K] sigma_year;
+
+  // Latent Stuff+/Location+ process
+  vector[3] beta_stuff_lat;
+  vector[3] beta_location_lat;
+  matrix[J_player, 4] z_player_plv;
+  vector<lower=0>[4] sigma_player_plv;
+  cholesky_factor_corr[4] L_player_plv;
+  real<lower=0> sigma_stuff_obs;
+  real<lower=0> sigma_location_obs;
+
+  // Outcome effects of latent Stuff+/Location+
+  vector[K] beta_stuff_out;
+  vector[K] beta_location_out;
 }
 
 transformed parameters {
   matrix[J_player, K] u_player[R_player];
+  matrix[J_player, 4] u_player_plv;
 
   for (r in 1:R_player) {
     u_player[r] = z_player[r] * diag_pre_multiply(sigma_player[r], L_player[r])';
   }
+  u_player_plv = z_player_plv * diag_pre_multiply(sigma_player_plv, L_player_plv)';
 }
 
 model {
@@ -75,6 +94,15 @@ model {
 
   rho_year ~ normal(rho_year_mean, rho_year_sd);
   sigma_year ~ normal(0, sigma_year_sd);
+  beta_stuff_lat ~ normal(0, 1);
+  beta_location_lat ~ normal(0, 1);
+  to_vector(z_player_plv) ~ normal(0, 1);
+  sigma_player_plv ~ normal(0, 0.5);
+  L_player_plv ~ lkj_corr_cholesky(2);
+  sigma_stuff_obs ~ normal(0, 1);
+  sigma_location_obs ~ normal(0, 1);
+  beta_stuff_out ~ normal(0, 0.5);
+  beta_location_out ~ normal(0, 0.5);
 
   // AR(1) year effects
   for (k in 1:K) {
@@ -87,6 +115,27 @@ model {
   // Likelihood
   for (n in 1:N) {
     vector[K] eta;
+    real age_c;
+    real age2;
+    real stuff_lat;
+    real location_lat;
+
+    age_c = X[n, 2];
+    age2 = X[n, 3];
+
+    stuff_lat = beta_stuff_lat[1] + beta_stuff_lat[2] * age_c + beta_stuff_lat[3] * age2
+      + u_player_plv[player_id[n], 1]
+      + age_c * u_player_plv[player_id[n], 2];
+
+    location_lat = beta_location_lat[1] + beta_location_lat[2] * age_c + beta_location_lat[3] * age2
+      + u_player_plv[player_id[n], 3]
+      + age_c * u_player_plv[player_id[n], 4];
+
+    if (has_plv[n] == 1) {
+      stuff_obs_z[n] ~ normal(stuff_lat, sigma_stuff_obs / sqrt(plv_exposure[n]));
+      location_obs_z[n] ~ normal(location_lat, sigma_location_obs / sqrt(plv_exposure[n]));
+    }
+
     eta = (X[n] * beta)';
 
     for (r in 1:R_player) {
@@ -94,6 +143,8 @@ model {
     }
 
     eta += year_effect[, year_id[n]];
+    eta += beta_stuff_out * stuff_lat;
+    eta += beta_location_out * location_lat;
 
     for (k in 1:K_count) {
       int handled;
@@ -131,6 +182,22 @@ generated quantities {
   matrix[N_pred, K] eta_pred;
   for (n in 1:N_pred) {
     vector[K] eta;
+    real age_c;
+    real age2;
+    real stuff_lat;
+    real location_lat;
+
+    age_c = X_pred[n, 2];
+    age2 = X_pred[n, 3];
+
+    stuff_lat = beta_stuff_lat[1] + beta_stuff_lat[2] * age_c + beta_stuff_lat[3] * age2
+      + u_player_plv[player_id_pred[n], 1]
+      + age_c * u_player_plv[player_id_pred[n], 2];
+
+    location_lat = beta_location_lat[1] + beta_location_lat[2] * age_c + beta_location_lat[3] * age2
+      + u_player_plv[player_id_pred[n], 3]
+      + age_c * u_player_plv[player_id_pred[n], 4];
+
     eta = (X_pred[n] * beta)';
 
     for (r in 1:R_player) {
@@ -142,6 +209,8 @@ generated quantities {
     } else {
       eta += year_effect_2026;
     }
+    eta += beta_stuff_out * stuff_lat;
+    eta += beta_location_out * location_lat;
 
     eta_pred[n] = eta';
   }

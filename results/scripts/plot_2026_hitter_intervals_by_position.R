@@ -46,9 +46,15 @@ count_cats <- c("H", "R", "RBI", "SB", "HR")
 rate_cats <- c("AVG", "OBP", "SLG")
 
 build_category_df <- function(cat) {
-  mean_col <- paste0(cat, "_mean")
-  p05_col <- paste0(cat, "_p05")
-  p95_col <- paste0(cat, "_p95")
+  if (cat %in% count_cats) {
+    mean_col <- paste0(cat, "_mean_t")
+    p05_col <- paste0(cat, "_p05_t")
+    p95_col <- paste0(cat, "_p95_t")
+  } else {
+    mean_col <- paste0(cat, "_mean")
+    p05_col <- paste0(cat, "_p05")
+    p95_col <- paste0(cat, "_p95")
+  }
 
   if (!all(c(mean_col, p05_col, p95_col) %in% names(proj))) {
     return(NULL)
@@ -58,15 +64,6 @@ build_category_df <- function(cat) {
     select(playerid, PlayerName, position, PA, all_of(mean_col), all_of(p05_col), all_of(p95_col)) %>%
     rename(mean = all_of(mean_col), p05 = all_of(p05_col), p95 = all_of(p95_col)) %>%
     mutate(category = cat)
-
-  if (cat %in% count_cats) {
-    out <- out %>%
-      mutate(
-        mean = mean * PA,
-        p05 = p05 * PA,
-        p95 = p95 * PA
-      )
-  }
 
   out
 }

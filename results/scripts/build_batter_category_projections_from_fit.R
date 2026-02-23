@@ -9,6 +9,8 @@ prep_path <- "models/hitter_model_inputs.rds"
 input_path <- "data/fangraphs_batters_2018_2025.csv"
 output_projection_path <- "results/projections/batters/category_projections_2026.csv"
 atc_pa_path <- "data/atc_pa_projections_2026.csv"
+ppd_seed <- as.integer(Sys.getenv("HITTER_PPD_SEED", "123"))
+pa_cv <- as.numeric(Sys.getenv("HITTER_PA_ATC_CV", "0.10"))
 
 count_outcomes <- c("H", "R", "RBI", "HR", "SB")
 cont_outcomes <- c("AVG", "OBP", "SLG")
@@ -16,6 +18,7 @@ epsilon <- 1e-4
 
 fit <- readRDS(fit_path)
 prep <- readRDS(prep_path)
+set.seed(ppd_seed)
 
 raw <- read_csv(input_path, show_col_types = FALSE) %>%
   mutate(Season = as.integer(Season))
@@ -60,14 +63,54 @@ atc <- atc %>%
 proj <- player_lookup %>%
   left_join(latest_lookup, by = c("playerid", "PlayerName")) %>%
   left_join(atc, by = "playerid") %>%
-  mutate(position = if_else(is.na(position) | position == "", "UNK", position))
+  mutate(position = if_else(is.na(position) | position == "", "UNK", position)) %>%
+  filter(!is.na(PA_atc), PA_atc > 0)
 
 eta_pred <- rstan::extract(fit, pars = "eta_pred")$eta_pred
+n_draw <- dim(eta_pred)[1]
+lookup_ids <- as.character(prep$player_lookup$playerid)
+keep_idx <- match(proj$playerid, lookup_ids)
+if (any(is.na(keep_idx))) {
+  stop("Could not align projected player ids to eta_pred indices.")
+}
+n_player <- length(keep_idx)
 
-rate_count <- exp(eta_pred[, , 1:length(count_outcomes)])
-avg_pred <- 1 / (1 + exp(-eta_pred[, , length(count_outcomes) + 1]))
-obp_pred <- 1 / (1 + exp(-eta_pred[, , length(count_outcomes) + 2]))
-slg_pred <- pmax(exp(eta_pred[, , length(count_outcomes) + 3]) - epsilon, 0)
+avg_pred <- 1 / (1 + exp(-eta_pred[, keep_idx, length(count_outcomes) + 1]))
+obp_pred <- 1 / (1 + exp(-eta_pred[, keep_idx, length(count_outcomes) + 2]))
+slg_pred <- pmax(exp(eta_pred[, keep_idx, length(count_outcomes) + 3]) - epsilon, 0)
+
+sample_pa_draws <- function(pa_vec, n_draw, cv) {
+  if (!is.finite(cv) || cv <= 0) {
+    return(matrix(rep(pa_vec, each = n_draw), nrow = n_draw))
+  }
+  shape <- 1 / (cv^2)
+  scale_vec <- pa_vec / shape
+  matrix(
+    rgamma(n_draw * length(pa_vec), shape = shape, scale = rep(scale_vec, each = n_draw)),
+    nrow = n_draw
+  )
+}
+
+pa_mat <- sample_pa_draws(proj$PA_atc, n_draw, pa_cv)
+draw_poisson <- function(rate_mat, exposure_mat) {
+  lambda <- rate_mat * exposure_mat
+  out <- matrix(NA_real_, nrow = nrow(rate_mat), ncol = ncol(rate_mat))
+  valid <- is.finite(lambda) & lambda >= 0 & is.finite(exposure_mat) & exposure_mat > 0
+  out[valid] <- rpois(sum(valid), lambda[valid])
+  out
+}
+
+count_rate_draws <- vector("list", length(count_outcomes))
+count_total_draws <- vector("list", length(count_outcomes))
+for (k in seq_along(count_outcomes)) {
+  rate_k <- exp(eta_pred[, keep_idx, k])
+  count_k <- draw_poisson(rate_k, pa_mat)
+  rate_ppd <- matrix(NA_real_, nrow = n_draw, ncol = n_player)
+  valid <- is.finite(count_k) & is.finite(pa_mat) & pa_mat > 0
+  rate_ppd[valid] <- count_k[valid] / pa_mat[valid]
+  count_rate_draws[[k]] <- rate_ppd
+  count_total_draws[[k]] <- count_k
+}
 
 summarize_draws <- function(draws_mat) {
   tibble(
@@ -79,9 +122,13 @@ summarize_draws <- function(draws_mat) {
 }
 
 for (k in seq_along(count_outcomes)) {
-  summary_k <- summarize_draws(rate_count[, , k])
+  summary_k <- summarize_draws(count_rate_draws[[k]])
   names(summary_k) <- paste0(count_outcomes[k], "_", names(summary_k))
   proj <- bind_cols(proj, summary_k)
+
+  summary_t <- summarize_draws(count_total_draws[[k]])
+  names(summary_t) <- paste0(count_outcomes[k], "_", names(summary_t), "_t")
+  proj <- bind_cols(proj, summary_t)
 }
 
 summary_avg <- summarize_draws(avg_pred)
@@ -92,29 +139,5 @@ summary_slg <- summarize_draws(slg_pred)
 names(summary_slg) <- paste0("SLG_", names(summary_slg))
 
 proj <- bind_cols(proj, summary_avg, summary_obp, summary_slg)
-
-proj <- proj %>%
-  mutate(
-    H_mean_t = H_mean * PA_atc,
-    H_p05_t = H_p05 * PA_atc,
-    H_p50_t = H_p50 * PA_atc,
-    H_p95_t = H_p95 * PA_atc,
-    R_mean_t = R_mean * PA_atc,
-    R_p05_t = R_p05 * PA_atc,
-    R_p50_t = R_p50 * PA_atc,
-    R_p95_t = R_p95 * PA_atc,
-    RBI_mean_t = RBI_mean * PA_atc,
-    RBI_p05_t = RBI_p05 * PA_atc,
-    RBI_p50_t = RBI_p50 * PA_atc,
-    RBI_p95_t = RBI_p95 * PA_atc,
-    HR_mean_t = HR_mean * PA_atc,
-    HR_p05_t = HR_p05 * PA_atc,
-    HR_p50_t = HR_p50 * PA_atc,
-    HR_p95_t = HR_p95 * PA_atc,
-    SB_mean_t = SB_mean * PA_atc,
-    SB_p05_t = SB_p05 * PA_atc,
-    SB_p50_t = SB_p50 * PA_atc,
-    SB_p95_t = SB_p95 * PA_atc
-  )
 
 write_csv(proj, output_projection_path)

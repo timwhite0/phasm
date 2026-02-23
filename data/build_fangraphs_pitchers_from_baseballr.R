@@ -8,6 +8,9 @@ start_season <- as.integer(Sys.getenv("FG_START_SEASON", "2018"))
 end_season <- as.integer(Sys.getenv("FG_END_SEASON", "2025"))
 output_path <- Sys.getenv("FG_OUTPUT_PATH", "data/fangraphs_pitchers_2018_2025.csv")
 require_recent <- as.integer(Sys.getenv("FG_REQUIRE_RECENT", "1"))
+plv_type_override <- Sys.getenv("FG_PLV_TYPE", "")
+plv_discovery_min <- as.integer(Sys.getenv("FG_PLV_DISCOVERY_MIN_TYPE", "0"))
+plv_discovery_max <- as.integer(Sys.getenv("FG_PLV_DISCOVERY_MAX_TYPE", "60"))
 
 convert_ip <- function(ip_raw) {
   ip_num <- suppressWarnings(as.numeric(ip_raw))
@@ -22,19 +25,45 @@ convert_ip <- function(ip_raw) {
   whole + adj
 }
 
+pick_col <- function(df, candidates) {
+  hit <- candidates[candidates %in% names(df)]
+  if (length(hit) == 0) return(NULL)
+  hit[[1]]
+}
+
+fetch_pitch_leaders <- function(season, type = "8") {
+  fg_pitch_leaders(
+    startseason = as.character(season),
+    endseason = as.character(season),
+    stats = "pit",
+    pos = "all",
+    lg = "all",
+    qual = "0",
+    ind = "1",
+    pageitems = "5000",
+    type = as.character(type)
+  )
+}
+
+discover_plv_type <- function(season, type_min, type_max) {
+  cand <- seq(type_min, type_max)
+  for (tp in cand) {
+    message(sprintf("Trying FanGraphs pitching leaderboard type=%d for Stuff+/Location+ discovery", tp))
+    probe <- tryCatch(fetch_pitch_leaders(season = season, type = tp), error = function(e) NULL)
+    if (is.null(probe) || nrow(probe) == 0) next
+    stuff_col <- pick_col(probe, c("Stuff+", "StuffPlus", "stuff_plus", "Stuff", "Pitching+_Stuff", "plv_stuff_plus", "sp_stuff"))
+    loc_col <- pick_col(probe, c("Location+", "LocationPlus", "location_plus", "Location", "Pitching+_Location", "plv_location_plus", "sp_location"))
+    if (!is.null(stuff_col) && !is.null(loc_col)) {
+      return(tp)
+    }
+  }
+  NA_integer_
+}
+
 fg <- lapply(seq(start_season, end_season), function(season) {
   message(sprintf("Fetching FanGraphs pitching leaders for %d", season))
   tryCatch(
-    fg_pitch_leaders(
-      startseason = as.character(season),
-      endseason = as.character(season),
-      stats = "pit",
-      pos = "all",
-      lg = "all",
-      qual = "0",
-      ind = "1",
-      pageitems = "5000"
-    ),
+    fetch_pitch_leaders(season = season, type = 8),
     error = function(e) {
       message(sprintf("Failed to fetch season %d: %s", season, e$message))
       NULL
@@ -90,6 +119,89 @@ fg <- fg %>%
     IP = convert_ip(IP)
   ) %>%
   filter(Season >= start_season, Season <= end_season)
+
+plv_type <- NA_integer_
+if (nchar(plv_type_override) > 0) {
+  plv_type <- suppressWarnings(as.integer(plv_type_override))
+}
+if (is.na(plv_type)) {
+  plv_type <- discover_plv_type(season = end_season, type_min = plv_discovery_min, type_max = plv_discovery_max)
+}
+
+plv <- NULL
+if (!is.na(plv_type)) {
+  message(sprintf("Using FanGraphs leaderboard type=%d for Stuff+/Location+ pull", plv_type))
+  plv <- lapply(seq(start_season, end_season), function(season) {
+    message(sprintf("Fetching FanGraphs PLV leaders for %d (type=%d)", season, plv_type))
+    tryCatch(fetch_pitch_leaders(season = season, type = plv_type), error = function(e) NULL)
+  }) %>% bind_rows()
+}
+
+if (!is.null(plv) && nrow(plv) > 0) {
+  plv_stuff_col <- pick_col(plv, c("Stuff+", "StuffPlus", "stuff_plus", "Stuff", "Pitching+_Stuff", "plv_stuff_plus", "sp_stuff"))
+  plv_loc_col <- pick_col(plv, c("Location+", "LocationPlus", "location_plus", "Location", "Pitching+_Location", "plv_location_plus", "sp_location"))
+  plv_bf_col <- pick_col(plv, c("BF", "TBF", "BFP", "BattersFaced", "Batters Faced", "batters_faced"))
+  plv_mlbam_col <- pick_col(plv, c("xMLBAMID", "mlbam_id", "MLBAMID"))
+  plv_pid_col <- pick_col(plv, c("playerid"))
+
+  if (!is.null(plv_stuff_col) && !is.null(plv_loc_col)) {
+    plv_small <- plv %>%
+      transmute(
+        Season = as.integer(Season),
+        playerid = as.character(.data[[plv_pid_col]]),
+        mlbam_id = if (!is.null(plv_mlbam_col)) suppressWarnings(as.numeric(.data[[plv_mlbam_col]])) else NA_real_,
+        StuffPlus_sc = suppressWarnings(as.numeric(.data[[plv_stuff_col]])),
+        LocationPlus_sc = suppressWarnings(as.numeric(.data[[plv_loc_col]])),
+        BF_sc = if (!is.null(plv_bf_col)) suppressWarnings(as.numeric(.data[[plv_bf_col]])) else NA_real_
+      ) %>%
+      distinct(Season, playerid, .keep_all = TRUE)
+
+    fg_mlbam_col <- pick_col(fg, c("xMLBAMID", "xMLBAMID.1", "mlbam_id", "MLBAMID"))
+    if (!is.null(fg_mlbam_col)) {
+      fg <- fg %>% mutate(mlbam_id = suppressWarnings(as.numeric(.data[[fg_mlbam_col]])))
+    } else {
+      fg <- fg %>% mutate(mlbam_id = NA_real_)
+    }
+
+    if (all(is.na(fg$mlbam_id))) {
+      fg <- fg %>% left_join(plv_small, by = c("Season", "playerid"))
+    } else {
+      fg <- fg %>% left_join(plv_small, by = c("Season", "mlbam_id"), suffix = c("", "_pid"))
+      if ("StuffPlus_sc_pid" %in% names(fg)) fg$StuffPlus_sc <- dplyr::coalesce(fg$StuffPlus_sc, fg$StuffPlus_sc_pid)
+      if ("LocationPlus_sc_pid" %in% names(fg)) fg$LocationPlus_sc <- dplyr::coalesce(fg$LocationPlus_sc, fg$LocationPlus_sc_pid)
+      if ("BF_sc_pid" %in% names(fg)) fg$BF_sc <- dplyr::coalesce(fg$BF_sc, fg$BF_sc_pid)
+      fg <- fg %>% select(-any_of(c("playerid_pid", "StuffPlus_sc_pid", "LocationPlus_sc_pid", "BF_sc_pid")))
+    }
+  }
+}
+
+base_stuff_col <- pick_col(fg, c("Stuff+", "StuffPlus", "stuff_plus", "Stuff", "Pitching+_Stuff", "plv_stuff_plus", "sp_stuff"))
+base_loc_col <- pick_col(fg, c("Location+", "LocationPlus", "location_plus", "Location", "Pitching+_Location", "plv_location_plus", "sp_location"))
+base_bf_col <- pick_col(fg, c("BF", "TBF", "BFP", "BattersFaced", "Batters Faced", "batters_faced"))
+
+fg <- fg %>%
+  mutate(
+    StuffPlus = dplyr::coalesce(
+      if (!is.null(base_stuff_col)) suppressWarnings(as.numeric(.data[[base_stuff_col]])) else NA_real_,
+      if ("StuffPlus_sc" %in% names(.)) suppressWarnings(as.numeric(StuffPlus_sc)) else NA_real_
+    ),
+    LocationPlus = dplyr::coalesce(
+      if (!is.null(base_loc_col)) suppressWarnings(as.numeric(.data[[base_loc_col]])) else NA_real_,
+      if ("LocationPlus_sc" %in% names(.)) suppressWarnings(as.numeric(LocationPlus_sc)) else NA_real_
+    ),
+    BF = dplyr::coalesce(
+      if (!is.null(base_bf_col)) suppressWarnings(as.numeric(.data[[base_bf_col]])) else NA_real_,
+      if ("BF_sc" %in% names(.)) suppressWarnings(as.numeric(BF_sc)) else NA_real_
+    )
+  ) %>%
+  select(-any_of(c("StuffPlus_sc", "LocationPlus_sc", "BF_sc")))
+
+if (all(is.na(fg$StuffPlus)) || all(is.na(fg$LocationPlus))) {
+  warning(
+    "StuffPlus/LocationPlus were not found from FanGraphs leaderboards. ",
+    "Set FG_PLV_TYPE to the correct leaderboard type to force pull once identified."
+  )
+}
 
 fg <- fg %>%
   mutate(
@@ -148,7 +260,8 @@ if (!is.na(require_recent) && require_recent == 1) {
 
 out <- fg %>% select(
   Season, PlayerName, playerid, Age, Role, Team, IP, G, GS,
-  SO, BB, H, ER, SV, HLD, SVHLD, role_leverage, W, QS
+  SO, BB, H, ER, SV, HLD, SVHLD, role_leverage, W, QS,
+  StuffPlus, LocationPlus, BF
 )
 
 write_csv(out, output_path)

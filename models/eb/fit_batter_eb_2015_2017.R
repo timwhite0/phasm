@@ -11,9 +11,9 @@ options(mc.cores = cores)
 message(sprintf("detectCores=%d, mc.cores=%d", cores, getOption("mc.cores")))
 
 # Config
-input_path <- "data/fangraphs_batters_2013_2017.csv"
+input_path <- "data/fangraphs_batters_2015_2017.csv"
 stan_path <- "models/hitter_model.stan"
-output_fit_path <- "models/batter_eb_2013_2017_fit.rds"
+output_fit_path <- "models/batter_eb_2015_2017_fit.rds"
 output_summary_path <- "results/prior_predictive/batter_prior_summary.csv"
 
 chains <- 2
@@ -23,11 +23,13 @@ seed <- 42
 refresh <- 10
 subset_players <- 0
 use_existing_fit <- as.integer(Sys.getenv("USE_EXISTING_FIT", "0"))
+stan_init <- Sys.getenv("STAN_INIT", "")
 
 # Outcomes
 count_outcomes <- c("H", "R", "RBI", "HR", "SB")
 cont_outcomes <- c("AVG", "OBP", "SLG")
 all_outcomes <- c(count_outcomes, cont_outcomes)
+statcast_covars <- c("EV", "LA", "Events", "BarrelPct", "HardHitPct")
 
 # Helpers
 logit <- function(x) log(x / (1 - x))
@@ -39,7 +41,15 @@ raw <- read_csv(input_path, show_col_types = FALSE)
 # Basic cleaning
 raw <- raw %>%
   mutate(Season = as.integer(Season)) %>%
-  filter(Season >= 2013, Season <= 2017)
+  filter(Season >= 2015, Season <= 2017)
+
+missing_statcast <- setdiff(statcast_covars, names(raw))
+if (length(missing_statcast) > 0) {
+  stop(
+    "Missing Statcast covariates in EB hitter input: ",
+    paste(missing_statcast, collapse = ", ")
+  )
+}
 
 # Optional subset for faster testing
 if (!is.na(subset_players) && subset_players > 0) {
@@ -57,6 +67,39 @@ raw <- raw %>%
     age_c = (Age - age_mean) / age_sd,
     age2 = age_c^2
   )
+
+sc_mean <- setNames(numeric(2), c("EV", "LA"))
+sc_sd <- setNames(numeric(2), c("EV", "LA"))
+for (v in c("EV", "LA")) {
+  raw[[v]] <- suppressWarnings(as.numeric(raw[[v]]))
+  mu <- mean(raw[[v]], na.rm = TRUE)
+  sdv <- sd(raw[[v]], na.rm = TRUE)
+  if (is.na(mu)) mu <- 0
+  if (is.na(sdv) || sdv == 0) sdv <- 1
+  sc_mean[[v]] <- mu
+  sc_sd[[v]] <- sdv
+  raw[[v]] <- dplyr::coalesce(raw[[v]], mu)
+  raw[[paste0(v, "_z")]] <- (raw[[v]] - mu) / sdv
+}
+
+raw <- raw %>%
+  mutate(
+    Events = suppressWarnings(as.numeric(Events)),
+    Events = if_else(is.na(Events) | Events < 1, 1, Events)
+  )
+
+bbe_mean <- setNames(numeric(2), c("BarrelPct", "HardHitPct"))
+for (v in c("BarrelPct", "HardHitPct")) {
+  raw[[v]] <- suppressWarnings(as.numeric(raw[[v]]))
+  prop <- raw[[v]]
+  prop <- ifelse(is.na(prop), NA_real_, ifelse(prop > 1, prop / 100, prop))
+  prop <- pmin(pmax(prop, 1e-4), 1 - 1e-4)
+  mu <- mean(prop, na.rm = TRUE)
+  if (is.na(mu)) mu <- 0.5
+  bbe_mean[[v]] <- mu
+  prop <- dplyr::coalesce(prop, mu)
+  raw[[paste0(v, "_logit")]] <- logit(prop)
+}
 
 # Rebuild IDs after filtering
 raw <- raw %>%
@@ -130,7 +173,21 @@ latest_by_player <- latest_by_player %>%
     age_c = (Age - age_mean) / age_sd,
     age2 = age_c^2,
     pos_raw = if_else(is.na(position) | position == "", "UNK", position),
-    pos_id = as.integer(factor(pos_raw, levels = levels(factor(raw$pos_raw))))
+    pos_id = as.integer(factor(pos_raw, levels = levels(factor(raw$pos_raw)))),
+    EV = dplyr::coalesce(as.numeric(EV), sc_mean[["EV"]]),
+    LA = dplyr::coalesce(as.numeric(LA), sc_mean[["LA"]]),
+    EV_z = (EV - sc_mean[["EV"]]) / sc_sd[["EV"]],
+    LA_z = (LA - sc_mean[["LA"]]) / sc_sd[["LA"]],
+    BarrelPct = suppressWarnings(as.numeric(BarrelPct)),
+    HardHitPct = suppressWarnings(as.numeric(HardHitPct)),
+    BarrelPct = if_else(BarrelPct > 1, BarrelPct / 100, BarrelPct),
+    HardHitPct = if_else(HardHitPct > 1, HardHitPct / 100, HardHitPct),
+    BarrelPct = dplyr::coalesce(BarrelPct, bbe_mean[["BarrelPct"]]),
+    HardHitPct = dplyr::coalesce(HardHitPct, bbe_mean[["HardHitPct"]]),
+    BarrelPct = pmin(pmax(BarrelPct, 1e-4), 1 - 1e-4),
+    HardHitPct = pmin(pmax(HardHitPct, 1e-4), 1 - 1e-4),
+    BarrelPct_logit = logit(BarrelPct),
+    HardHitPct_logit = logit(HardHitPct)
   )
 
 X_pred <- cbind(
@@ -188,6 +245,11 @@ stan_data <- list(
   y_count = count_mat,
   offset_log_pa = offset_log_pa,
   y_cont = y_cont,
+  ev_obs_z = raw$EV_z,
+  la_obs_z = raw$LA_z,
+  barrel_obs_logit = raw$BarrelPct_logit,
+  hardhit_obs_logit = raw$HardHitPct_logit,
+  events_bb = raw$Events,
   N_pred = nrow(latest_by_player),
   X_pred = X_pred,
   Z_pred = Z_pred,
@@ -201,6 +263,12 @@ stan_data <- list(
 if (!is.na(use_existing_fit) && use_existing_fit == 1 && file.exists(output_fit_path)) {
   fit <- readRDS(output_fit_path)
 } else {
+  init_arg <- "random"
+  if (identical(stan_init, "0")) {
+    init_arg <- 0
+    message("Using Stan init = 0")
+  }
+
   fit <- stan(
     file = stan_path,
     data = stan_data,
@@ -209,6 +277,7 @@ if (!is.na(use_existing_fit) && use_existing_fit == 1 && file.exists(output_fit_
     warmup = warmup,
     seed = seed,
     refresh = refresh,
+    init = init_arg,
     control = list(adapt_delta = 0.9, max_treedepth = 12)
   )
 
@@ -257,9 +326,25 @@ summarize_vector_param <- function(arr, labels, param) {
   bind_rows(out)
 }
 
+summarize_scalar_param <- function(arr, label, param) {
+  stats <- as.list(summarize_vec(arr))
+  tibble(
+    param = param,
+    dim1 = label,
+    dim2 = NA_character_,
+    !!!stats
+  )
+}
+
 draws <- rstan::extract(
   fit,
-  pars = c("beta", "sigma_player", "sigma_pos", "sigma_year", "rho_year", "sigma_cont")
+  pars = c(
+    "beta", "sigma_player", "sigma_pos", "sigma_year", "rho_year", "sigma_cont",
+    "beta_ev_lat", "beta_la_lat", "sigma_ev_obs", "sigma_la_obs",
+    "beta_barrel_lat", "beta_hardhit_lat", "sigma_barrel_obs", "sigma_hardhit_obs",
+    "sigma_player_statcast", "sigma_player_bbe",
+    "beta_ev_out", "beta_la_out", "beta_barrel_out", "beta_hardhit_out"
+  )
 )
 
 beta_labels <- colnames(X)
@@ -273,7 +358,21 @@ summary_tbl <- bind_rows(
   summarize_array(draws$sigma_pos, pos_re_labels, outcome_labels, "sigma_pos"),
   summarize_vector_param(draws$sigma_year, outcome_labels, "sigma_year"),
   summarize_vector_param(draws$rho_year, outcome_labels, "rho_year"),
-  summarize_vector_param(draws$sigma_cont, cont_outcomes, "sigma_cont")
+  summarize_vector_param(draws$sigma_cont, cont_outcomes, "sigma_cont"),
+  summarize_vector_param(draws$beta_ev_lat, c("intercept", "age_c", "age2"), "beta_ev_lat"),
+  summarize_vector_param(draws$beta_la_lat, c("intercept", "age_c", "age2"), "beta_la_lat"),
+  summarize_vector_param(draws$beta_barrel_lat, c("intercept", "age_c", "age2"), "beta_barrel_lat"),
+  summarize_vector_param(draws$beta_hardhit_lat, c("intercept", "age_c", "age2"), "beta_hardhit_lat"),
+  summarize_scalar_param(draws$sigma_ev_obs, "sigma_ev_obs", "sigma_ev_obs"),
+  summarize_scalar_param(draws$sigma_la_obs, "sigma_la_obs", "sigma_la_obs"),
+  summarize_scalar_param(draws$sigma_barrel_obs, "sigma_barrel_obs", "sigma_barrel_obs"),
+  summarize_scalar_param(draws$sigma_hardhit_obs, "sigma_hardhit_obs", "sigma_hardhit_obs"),
+  summarize_vector_param(draws$sigma_player_statcast, c("ev_intercept", "ev_age", "la_intercept", "la_age"), "sigma_player_statcast"),
+  summarize_vector_param(draws$sigma_player_bbe, c("barrel_intercept", "barrel_age", "hardhit_intercept", "hardhit_age"), "sigma_player_bbe"),
+  summarize_vector_param(draws$beta_ev_out, c("H", "R", "RBI", "HR", "AVG", "OBP", "SLG"), "beta_ev_out"),
+  summarize_vector_param(draws$beta_la_out, c("H", "R", "RBI", "HR", "AVG", "OBP", "SLG"), "beta_la_out"),
+  summarize_vector_param(draws$beta_barrel_out, c("H", "R", "RBI", "HR", "AVG", "OBP", "SLG"), "beta_barrel_out"),
+  summarize_vector_param(draws$beta_hardhit_out, c("H", "R", "RBI", "HR", "AVG", "OBP", "SLG"), "beta_hardhit_out")
 )
 
 if (!dir.exists("results/prior_predictive")) {

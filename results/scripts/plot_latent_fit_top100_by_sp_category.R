@@ -7,12 +7,15 @@ suppressPackageStartupMessages({
 fit_path <- 'models/sp_model_fit.rds'
 prep_path <- 'models/sp_model_inputs.rds'
 input_path <- 'data/fangraphs_pitchers_2018_2025.csv'
+atc_ip_path <- "data/atc_ip_projections_2026.csv"
 results_dir <- 'results/plots/trends/pitchers/starters'
+ppd_seed <- as.integer(Sys.getenv("SP_PPD_SEED", "123"))
 
 if (!dir.exists('results')) dir.create('results')
 if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)
 
 prep <- readRDS(prep_path)
+set.seed(ppd_seed)
 
 cat_defs <- list(
   W = 'W_mean',
@@ -24,6 +27,26 @@ raw <- read_csv(input_path, show_col_types = FALSE) %>%
   mutate(Season = as.integer(Season)) %>%
   filter(Season >= 2018, Season <= 2025) %>%
   filter(Role == "SP")
+atc <- read_csv(atc_ip_path, show_col_types = FALSE)
+
+pick_col <- function(df, candidates) {
+  hit <- candidates[candidates %in% names(df)]
+  if (length(hit) == 0) return(NULL)
+  hit[[1]]
+}
+
+id_col <- pick_col(atc, c("playerid", "PlayerId", "player_id"))
+ip_col <- pick_col(atc, c("IP", "ip"))
+if (is.null(id_col) || is.null(ip_col)) {
+  stop("Could not find playerid or IP column in ATC projections.")
+}
+
+atc <- atc %>%
+  transmute(
+    playerid = as.character(.data[[id_col]]),
+    IP_atc = as.numeric(.data[[ip_col]])
+  ) %>%
+  filter(!is.na(playerid), !is.na(IP_atc), IP_atc > 0)
 
 age_mean <- mean(raw$Age, na.rm = TRUE)
 age_sd <- sd(raw$Age, na.rm = TRUE)
@@ -31,10 +54,12 @@ raw <- raw %>%
   mutate(
     age_c = (Age - age_mean) / age_sd,
     age2 = age_c^2,
-    player_id = as.integer(factor(playerid))
+    player_id = match(as.integer(playerid), prep$player_lookup$playerid),
+    year_id = match(Season, prep$years)
   )
 
-years <- sort(unique(raw$Season))
+raw <- raw %>%
+  filter(!is.na(player_id), !is.na(year_id), !is.na(IP), IP > 0)
 
 post <- rstan::extract(fit)
 eta_pred <- post$eta_pred
@@ -45,6 +70,18 @@ u_player <- post$u_player
 year_effect <- post$year_effect
 n_iter <- dim(beta)[1]
 K <- dim(beta)[3]
+J_player <- dim(u_player)[3]
+
+get_or_default <- function(x, default) {
+  if (is.null(x)) return(default)
+  x
+}
+
+beta_stuff_lat <- get_or_default(post$beta_stuff_lat, matrix(0, nrow = n_iter, ncol = 3))
+beta_location_lat <- get_or_default(post$beta_location_lat, matrix(0, nrow = n_iter, ncol = 3))
+beta_stuff_out <- get_or_default(post$beta_stuff_out, matrix(0, nrow = n_iter, ncol = K))
+beta_location_out <- get_or_default(post$beta_location_out, matrix(0, nrow = n_iter, ncol = K))
+u_player_plv <- get_or_default(post$u_player_plv, array(0, dim = c(n_iter, J_player, 4)))
 
 summarize_draws <- function(x) {
   c(
@@ -59,19 +96,26 @@ summarize_matrix <- function(draws_3d) {
   t(apply(draws_3d, 2, summarize_draws))
 }
 
-proj <- prep$player_lookup %>%
+proj_all <- prep$player_lookup %>%
   mutate(playerid = as.character(playerid)) %>%
-  distinct()
+  left_join(atc, by = "playerid")
+
+keep_idx <- which(!is.na(proj_all$IP_atc) & proj_all$IP_atc > 0)
+if (length(keep_idx) == 0) {
+  stop("No ATC IP matches found for 2026 projections.")
+}
+
+proj <- proj_all[keep_idx, ]
 
 rate_pred <- exp(eta_pred)
+ip_pred <- matrix(rep(proj$IP_atc, each = n_iter), nrow = n_iter)
+w_count_pred <- matrix(rpois(length(ip_pred), rate_pred[, keep_idx, 5] * ip_pred), nrow = n_iter)
+qs_count_pred <- matrix(rpois(length(ip_pred), rate_pred[, keep_idx, 6] * ip_pred), nrow = n_iter)
+
 proj <- bind_cols(
   proj,
-  setNames(as.data.frame(summarize_matrix(rate_pred[, , 1])), c("SO_mean", "SO_p05", "SO_p50", "SO_p95")),
-  setNames(as.data.frame(summarize_matrix(rate_pred[, , 2])), c("BB_mean", "BB_p05", "BB_p50", "BB_p95")),
-  setNames(as.data.frame(summarize_matrix(rate_pred[, , 3])), c("H_mean", "H_p05", "H_p50", "H_p95")),
-  setNames(as.data.frame(summarize_matrix(rate_pred[, , 4])), c("ER_mean", "ER_p05", "ER_p50", "ER_p95")),
-  setNames(as.data.frame(summarize_matrix(rate_pred[, , 5])), c("W_mean", "W_p05", "W_p50", "W_p95")),
-  setNames(as.data.frame(summarize_matrix(rate_pred[, , 6])), c("QS_mean", "QS_p05", "QS_p50", "QS_p95"))
+  setNames(as.data.frame(summarize_matrix(w_count_pred / ip_pred)), c("W_mean", "W_p05", "W_p50", "W_p95")),
+  setNames(as.data.frame(summarize_matrix(qs_count_pred / ip_pred)), c("QS_mean", "QS_p05", "QS_p50", "QS_p95"))
 )
 
 cat_top <- list()
@@ -105,7 +149,7 @@ for (o in outcomes) {
   )
 
   player_id <- subset$player_id
-  year_id <- match(subset$Season, years)
+  year_id <- subset$year_id
 
   n_rows <- nrow(subset)
   summaries <- vector('list', n_rows)
@@ -135,16 +179,22 @@ for (o in outcomes) {
     for (k in 1:K) {
       eta[, k] <- eta[, k] + year_effect[, k, yid]
     }
+    stuff_lat <- beta_stuff_lat[, 1] + beta_stuff_lat[, 2] * x_i[2] + beta_stuff_lat[, 3] * x_i[3] +
+      u_player_plv[, pid, 1] + x_i[2] * u_player_plv[, pid, 2]
+    location_lat <- beta_location_lat[, 1] + beta_location_lat[, 2] * x_i[2] + beta_location_lat[, 3] * x_i[3] +
+      u_player_plv[, pid, 3] + x_i[2] * u_player_plv[, pid, 4]
+    for (k in 1:K) {
+      eta[, k] <- eta[, k] + beta_stuff_out[, k] * stuff_lat + beta_location_out[, k] * location_lat
+    }
 
     rate_count <- exp(eta)
+    ip_hist <- subset$IP[i]
+    w_rate <- rpois(n_iter, rate_count[, 5] * ip_hist) / ip_hist
+    qs_rate <- rpois(n_iter, rate_count[, 6] * ip_hist) / ip_hist
 
     summaries[[i]] <- list(
-      SO = summarize_draws(rate_count[, 1]),
-      BB = summarize_draws(rate_count[, 2]),
-      H = summarize_draws(rate_count[, 3]),
-      ER = summarize_draws(rate_count[, 4]),
-      W = summarize_draws(rate_count[, 5]),
-      QS = summarize_draws(rate_count[, 6])
+      W = summarize_draws(w_rate),
+      QS = summarize_draws(qs_rate)
     )
   }
 
