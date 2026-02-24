@@ -66,7 +66,14 @@ proj <- player_lookup %>%
   mutate(position = if_else(is.na(position) | position == "", "UNK", position)) %>%
   filter(!is.na(PA_atc), PA_atc > 0)
 
-eta_pred <- rstan::extract(fit, pars = "eta_pred")$eta_pred
+has_phi_count <- "phi_count" %in% fit@sim$pars_oi
+extract_pars <- if (has_phi_count) c("eta_pred", "phi_count") else "eta_pred"
+post <- rstan::extract(fit, pars = extract_pars)
+eta_pred <- post$eta_pred
+phi_count <- post$phi_count
+if (!has_phi_count) {
+  warning("phi_count not found in fit; falling back to Poisson posterior predictive draws for counts.")
+}
 n_draw <- dim(eta_pred)[1]
 lookup_ids <- as.character(prep$player_lookup$playerid)
 keep_idx <- match(proj$playerid, lookup_ids)
@@ -92,11 +99,17 @@ sample_pa_draws <- function(pa_vec, n_draw, cv) {
 }
 
 pa_mat <- sample_pa_draws(proj$PA_atc, n_draw, pa_cv)
-draw_poisson <- function(rate_mat, exposure_mat) {
+draw_counts <- function(rate_mat, exposure_mat, phi_draw = NULL) {
   lambda <- rate_mat * exposure_mat
   out <- matrix(NA_real_, nrow = nrow(rate_mat), ncol = ncol(rate_mat))
   valid <- is.finite(lambda) & lambda >= 0 & is.finite(exposure_mat) & exposure_mat > 0
-  out[valid] <- rpois(sum(valid), lambda[valid])
+  if (is.null(phi_draw)) {
+    out[valid] <- rpois(sum(valid), lambda[valid])
+    return(out)
+  }
+  phi_mat <- matrix(phi_draw, nrow = nrow(rate_mat), ncol = ncol(rate_mat))
+  valid <- valid & is.finite(phi_mat) & phi_mat > 0
+  out[valid] <- rnbinom(sum(valid), mu = lambda[valid], size = phi_mat[valid])
   out
 }
 
@@ -104,7 +117,15 @@ count_rate_draws <- vector("list", length(count_outcomes))
 count_total_draws <- vector("list", length(count_outcomes))
 for (k in seq_along(count_outcomes)) {
   rate_k <- exp(eta_pred[, keep_idx, k])
-  count_k <- draw_poisson(rate_k, pa_mat)
+  phi_k <- NULL
+  if (!is.null(phi_count)) {
+    if (is.matrix(phi_count)) {
+      phi_k <- phi_count[, k]
+    } else if (length(phi_count) == n_draw * length(count_outcomes)) {
+      phi_k <- matrix(phi_count, nrow = n_draw, byrow = FALSE)[, k]
+    }
+  }
+  count_k <- draw_counts(rate_k, pa_mat, phi_k)
   rate_ppd <- matrix(NA_real_, nrow = n_draw, ncol = n_player)
   valid <- is.finite(count_k) & is.finite(pa_mat) & pa_mat > 0
   rate_ppd[valid] <- count_k[valid] / pa_mat[valid]

@@ -31,6 +31,10 @@ fit <- readRDS(fit_path)
 post <- rstan::extract(fit)
 eta_pred <- post$eta_pred
 sigma_cont <- post$sigma_cont
+phi_count <- post$phi_count
+if (!("phi_count" %in% fit@sim$pars_oi)) {
+  warning("phi_count not found in fit; count posterior predictive draws use Poisson fallback.")
+}
 n_iter <- dim(eta_pred)[1]
 
 # Build projection summaries from posterior predictive draws (90% intervals)
@@ -54,6 +58,29 @@ summarize_draws <- function(draws_mat) {
 
 summarize_matrix <- function(draws_3d) {
   t(apply(draws_3d, 2, summarize_draws))
+}
+
+get_phi_k <- function(k, n_iter) {
+  if (is.null(phi_count)) return(NULL)
+  if (is.matrix(phi_count)) return(phi_count[, k])
+  if (length(phi_count) == n_iter * 5) return(matrix(phi_count, nrow = n_iter, byrow = FALSE)[, k])
+  NULL
+}
+
+draw_count_rate <- function(rate_vec, exposure, phi_vec = NULL) {
+  if (!is.finite(exposure) || exposure <= 0) {
+    return(rep(NA_real_, length(rate_vec)))
+  }
+  lambda <- rate_vec * exposure
+  out <- rep(NA_real_, length(rate_vec))
+  valid <- is.finite(lambda) & lambda >= 0
+  if (is.null(phi_vec)) {
+    out[valid] <- rpois(sum(valid), lambda[valid]) / exposure
+    return(out)
+  }
+  valid <- valid & is.finite(phi_vec) & phi_vec > 0
+  out[valid] <- rnbinom(sum(valid), mu = lambda[valid], size = phi_vec[valid]) / exposure
+  out
 }
 
 proj <- prep$player_lookup %>%
@@ -101,7 +128,14 @@ for (k in 1:5) {
   lambda <- rate_k * pa_mat_pred
   count_draw <- matrix(NA_real_, nrow = n_iter, ncol = ncol(pa_mat_pred))
   valid <- is.finite(lambda) & lambda >= 0 & is.finite(pa_mat_pred) & pa_mat_pred > 0
-  count_draw[valid] <- rpois(sum(valid), lambda[valid])
+  phi_k <- get_phi_k(k, n_iter)
+  if (is.null(phi_k)) {
+    count_draw[valid] <- rpois(sum(valid), lambda[valid])
+  } else {
+    phi_mat <- matrix(phi_k, nrow = n_iter, ncol = ncol(pa_mat_pred))
+    valid <- valid & is.finite(phi_mat) & phi_mat > 0
+    count_draw[valid] <- rnbinom(sum(valid), mu = lambda[valid], size = phi_mat[valid])
+  }
   out <- matrix(NA_real_, nrow = n_iter, ncol = ncol(pa_mat_pred))
   out[valid] <- count_draw[valid] / pa_mat_pred[valid]
   count_rate_ppd[[k]] <- out
@@ -297,7 +331,7 @@ for (o in outcomes) {
     count_rate_hist <- matrix(NA_real_, nrow = n_iter, ncol = 5)
     if (!is.na(pa_hist) && pa_hist > 0) {
       for (k in 1:5) {
-        count_rate_hist[, k] <- rpois(n_iter, rate_count[, k] * pa_hist) / pa_hist
+        count_rate_hist[, k] <- draw_count_rate(rate_count[, k], pa_hist, get_phi_k(k, n_iter))
       }
     }
     avg_pred <- inv_logit(rnorm(n_iter, eta[, 6], sigma_cont[, 1]))

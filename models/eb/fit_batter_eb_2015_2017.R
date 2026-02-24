@@ -16,12 +16,12 @@ stan_path <- "models/hitter_model.stan"
 output_fit_path <- "models/batter_eb_2015_2017_fit.rds"
 output_summary_path <- "results/prior_predictive/batter_prior_summary.csv"
 
-chains <- 2
-iter <- 2500
-warmup <- 500
-seed <- 42
-refresh <- 10
-subset_players <- 0
+chains <- as.integer(Sys.getenv("STAN_CHAINS", "2"))
+iter <- as.integer(Sys.getenv("STAN_ITER", "2500"))
+warmup <- as.integer(Sys.getenv("STAN_WARMUP", "500"))
+seed <- as.integer(Sys.getenv("STAN_SEED", "42"))
+refresh <- as.integer(Sys.getenv("STAN_REFRESH", "10"))
+subset_players <- as.integer(Sys.getenv("STAN_SUBSET_PLAYERS", "0"))
 use_existing_fit <- as.integer(Sys.getenv("USE_EXISTING_FIT", "0"))
 stan_init <- Sys.getenv("STAN_INIT", "")
 
@@ -138,6 +138,30 @@ sigma_year_sd <- rep(1, length(all_outcomes))
 rho_year_mean <- rep(0, length(all_outcomes))
 rho_year_sd <- rep(0.5, length(all_outcomes))
 sigma_cont_sd <- rep(1, length(cont_outcomes))
+beta_ev_lat_mean <- rep(0, 3)
+beta_ev_lat_sd <- rep(1, 3)
+beta_la_lat_mean <- rep(0, 3)
+beta_la_lat_sd <- rep(1, 3)
+beta_barrel_lat_mean <- rep(0, 3)
+beta_barrel_lat_sd <- rep(1, 3)
+beta_hardhit_lat_mean <- rep(0, 3)
+beta_hardhit_lat_sd <- rep(1, 3)
+sigma_player_statcast_sd <- rep(0.5, 4)
+sigma_player_bbe_sd <- rep(0.5, 4)
+sigma_ev_obs_sd <- 1
+sigma_la_obs_sd <- 1
+sigma_barrel_obs_sd <- 1
+sigma_hardhit_obs_sd <- 1
+beta_ev_out_mean <- rep(0, 7)
+beta_ev_out_sd <- rep(0.5, 7)
+beta_la_out_mean <- rep(0, 7)
+beta_la_out_sd <- rep(0.5, 7)
+beta_barrel_out_mean <- rep(0, 7)
+beta_barrel_out_sd <- rep(0.5, 7)
+beta_hardhit_out_mean <- rep(0, 7)
+beta_hardhit_out_sd <- rep(0.5, 7)
+phi_count_mean <- rep(20, length(count_outcomes))
+phi_count_sd <- rep(10, length(count_outcomes))
 
 # Outcomes
 count_mat <- raw %>%
@@ -236,6 +260,30 @@ stan_data <- list(
   rho_year_mean = rho_year_mean,
   rho_year_sd = rho_year_sd,
   sigma_cont_sd = sigma_cont_sd,
+  beta_ev_lat_mean = beta_ev_lat_mean,
+  beta_ev_lat_sd = beta_ev_lat_sd,
+  beta_la_lat_mean = beta_la_lat_mean,
+  beta_la_lat_sd = beta_la_lat_sd,
+  beta_barrel_lat_mean = beta_barrel_lat_mean,
+  beta_barrel_lat_sd = beta_barrel_lat_sd,
+  beta_hardhit_lat_mean = beta_hardhit_lat_mean,
+  beta_hardhit_lat_sd = beta_hardhit_lat_sd,
+  sigma_player_statcast_sd = sigma_player_statcast_sd,
+  sigma_player_bbe_sd = sigma_player_bbe_sd,
+  sigma_ev_obs_sd = sigma_ev_obs_sd,
+  sigma_la_obs_sd = sigma_la_obs_sd,
+  sigma_barrel_obs_sd = sigma_barrel_obs_sd,
+  sigma_hardhit_obs_sd = sigma_hardhit_obs_sd,
+  beta_ev_out_mean = beta_ev_out_mean,
+  beta_ev_out_sd = beta_ev_out_sd,
+  beta_la_out_mean = beta_la_out_mean,
+  beta_la_out_sd = beta_la_out_sd,
+  beta_barrel_out_mean = beta_barrel_out_mean,
+  beta_barrel_out_sd = beta_barrel_out_sd,
+  beta_hardhit_out_mean = beta_hardhit_out_mean,
+  beta_hardhit_out_sd = beta_hardhit_out_sd,
+  phi_count_mean = phi_count_mean,
+  phi_count_sd = phi_count_sd,
   J_player = length(unique(raw$player_id)),
   J_pos = length(unique(raw$pos_id)),
   J_year = length(years),
@@ -282,6 +330,10 @@ if (!is.na(use_existing_fit) && use_existing_fit == 1 && file.exists(output_fit_
   )
 
   saveRDS(fit, output_fit_path)
+}
+
+if (length(fit@sim$samples) == 0) {
+  stop("Stan fit has no samples; prior summary was not written.")
 }
 
 summarize_vec <- function(x) {
@@ -344,6 +396,7 @@ draws <- rstan::extract(
     "beta_barrel_lat", "beta_hardhit_lat", "sigma_barrel_obs", "sigma_hardhit_obs",
     "sigma_player_statcast", "sigma_player_bbe",
     "beta_ev_out", "beta_la_out", "beta_barrel_out", "beta_hardhit_out"
+    , "phi_count"
   )
 )
 
@@ -373,6 +426,8 @@ summary_tbl <- bind_rows(
   summarize_vector_param(draws$beta_la_out, c("H", "R", "RBI", "HR", "AVG", "OBP", "SLG"), "beta_la_out"),
   summarize_vector_param(draws$beta_barrel_out, c("H", "R", "RBI", "HR", "AVG", "OBP", "SLG"), "beta_barrel_out"),
   summarize_vector_param(draws$beta_hardhit_out, c("H", "R", "RBI", "HR", "AVG", "OBP", "SLG"), "beta_hardhit_out")
+  ,
+  summarize_vector_param(draws$phi_count, count_outcomes, "phi_count")
 )
 
 if (!dir.exists("results/prior_predictive")) {

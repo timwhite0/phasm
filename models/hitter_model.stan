@@ -39,6 +39,8 @@ data {
   vector<lower=0>[7] beta_barrel_out_sd;
   vector[7] beta_hardhit_out_mean;
   vector<lower=0>[7] beta_hardhit_out_sd;
+  vector<lower=0>[K_count] phi_count_mean;
+  vector<lower=0>[K_count] phi_count_sd;
 
   int<lower=1> J_player;
   int<lower=1> J_pos;
@@ -110,6 +112,7 @@ parameters {
   vector[7] beta_la_out;
   vector[7] beta_barrel_out;
   vector[7] beta_hardhit_out;
+  vector<lower=0>[K_count] phi_count;
 }
 
 transformed parameters {
@@ -171,6 +174,7 @@ model {
   beta_la_out ~ normal(beta_la_out_mean, beta_la_out_sd);
   beta_barrel_out ~ normal(beta_barrel_out_mean, beta_barrel_out_sd);
   beta_hardhit_out ~ normal(beta_hardhit_out_mean, beta_hardhit_out_sd);
+  phi_count ~ normal(phi_count_mean, phi_count_sd);
 
   // AR(1) year effects
   for (k in 1:K) {
@@ -239,7 +243,7 @@ model {
     }
 
     for (k in 1:K_count) {
-      y_count[n, k] ~ poisson_log(eta[k] + offset_log_pa[n]);
+      y_count[n, k] ~ neg_binomial_2_log(eta[k] + offset_log_pa[n], phi_count[k]);
     }
 
     for (k in 1:K_cont) {

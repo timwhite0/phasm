@@ -14,10 +14,11 @@ message(sprintf("detectCores=%d, mc.cores=%d", cores, getOption("mc.cores")))
 # Config
 input_path <- Sys.getenv("BATTER_INPUT_PATH", "data/fangraphs_batters_2018_2025.csv")
 stan_path <- Sys.getenv("BATTER_STAN_PATH", "models/hitter_model.stan")
-output_projection_path <- Sys.getenv("BATTER_OUTPUT_PROJECTION_PATH", "results/projections/batters/category_projections_2026.csv")
+output_projection_path <- Sys.getenv("BATTER_OUTPUT_PROJECTION_PATH", "tmp/hitter_model_fit_projection_preview.csv")
 output_fit_path <- Sys.getenv("BATTER_OUTPUT_FIT_PATH", "models/hitter_model_fit.rds")
 output_prep_path <- Sys.getenv("BATTER_OUTPUT_PREP_PATH", "models/hitter_model_inputs.rds")
 batter_eb_summary_path <- Sys.getenv("BATTER_EB_SUMMARY_PATH", "results/prior_predictive/batter_prior_summary.csv")
+write_projection_preview <- as.integer(Sys.getenv("BATTER_WRITE_MAIN_PROJECTION", "0"))
 
 run_fit <- TRUE
 chains <- as.integer(Sys.getenv("STAN_CHAINS", "4"))
@@ -26,6 +27,7 @@ warmup <- as.integer(Sys.getenv("STAN_WARMUP", "500"))
 seed <- as.integer(Sys.getenv("STAN_SEED", "123"))
 refresh <- as.integer(Sys.getenv("STAN_REFRESH", "100"))
 subset_players <- as.integer(Sys.getenv("STAN_SUBSET_PLAYERS", "0"))
+stan_init <- Sys.getenv("STAN_INIT", "")
 
 # Outcomes
 count_outcomes <- c("H", "R", "RBI", "HR", "SB")
@@ -163,6 +165,8 @@ beta_barrel_out_mean <- rep(0, 7)
 beta_barrel_out_sd <- rep(0.5, 7)
 beta_hardhit_out_mean <- rep(0, 7)
 beta_hardhit_out_sd <- rep(0.5, 7)
+phi_count_mean <- rep(20, length(count_outcomes))
+phi_count_sd <- rep(10, length(count_outcomes))
 
 if (!file.exists(batter_eb_summary_path)) {
   message("EB summary file not found; falling back to old batter priors: ", batter_eb_summary_path)
@@ -303,6 +307,10 @@ if (!file.exists(batter_eb_summary_path)) {
     tmp <- get_vec("beta_hardhit_out", out_no_sb_labels)
     beta_hardhit_out_mean <- tmp$mean
     beta_hardhit_out_sd <- tmp$sd
+
+    tmp <- get_vec("phi_count", count_outcomes)
+    phi_count_mean <- pmax(tmp$mean, 0.01)
+    phi_count_sd <- pmax(tmp$sd, 0.01)
   }, error = function(e) {
     eb_ok <<- FALSE
     eb_err <<- conditionMessage(e)
@@ -438,6 +446,8 @@ stan_data <- list(
   beta_barrel_out_sd = beta_barrel_out_sd,
   beta_hardhit_out_mean = beta_hardhit_out_mean,
   beta_hardhit_out_sd = beta_hardhit_out_sd,
+  phi_count_mean = phi_count_mean,
+  phi_count_sd = phi_count_sd,
   J_player = length(unique(raw$player_id)),
   J_pos = length(unique(raw$pos_id)),
   J_year = length(years),
@@ -477,6 +487,12 @@ saveRDS(
 )
 
 if (run_fit) {
+  init_arg <- "random"
+  if (identical(stan_init, "0")) {
+    init_arg <- 0
+    message("Using Stan init = 0")
+  }
+
   fit <- stan(
     file = stan_path,
     data = stan_data,
@@ -485,6 +501,7 @@ if (run_fit) {
     warmup = warmup,
     seed = seed,
     refresh = refresh,
+    init = init_arg,
     control = list(adapt_delta = 0.9, max_treedepth = 12)
   )
   saveRDS(fit, output_fit_path)
@@ -537,4 +554,14 @@ names(summary_slg) <- paste0("SLG_", names(summary_slg))
 
 proj <- bind_cols(proj, summary_avg, summary_obp, summary_slg)
 
-write_csv(proj, output_projection_path)
+if (!is.na(write_projection_preview) && write_projection_preview == 1) {
+  out_dir <- dirname(output_projection_path)
+  if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+  write_csv(proj, output_projection_path)
+  message("Wrote main-fit projection preview to: ", output_projection_path)
+} else {
+  message(
+    "Skipped writing main-fit projection preview. ",
+    "Set BATTER_WRITE_MAIN_PROJECTION=1 to enable."
+  )
+}

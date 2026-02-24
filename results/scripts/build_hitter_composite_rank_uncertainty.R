@@ -40,14 +40,27 @@ if (length(keep) == 0) {
   stop("No players with non-missing positive PA_atc in category projections.")
 }
 
-post <- rstan::extract(fit, pars = "eta_pred")
+has_phi_count <- "phi_count" %in% fit@sim$pars_oi
+extract_pars <- if (has_phi_count) c("eta_pred", "phi_count") else "eta_pred"
+post <- rstan::extract(fit, pars = extract_pars)
 eta_pred <- post$eta_pred
+phi_count <- post$phi_count
+if (!has_phi_count) {
+  warning("phi_count not found in fit; falling back to Poisson posterior predictive draws for counts.")
+}
 n_draw <- dim(eta_pred)[1]
 
 if (!is.na(draw_cap) && draw_cap > 0 && draw_cap < n_draw) {
   set.seed(set_seed)
   draw_idx <- sort(sample.int(n_draw, draw_cap, replace = FALSE))
   eta_pred <- eta_pred[draw_idx, , , drop = FALSE]
+  if (!is.null(phi_count)) {
+    if (is.matrix(phi_count)) {
+      phi_count <- phi_count[draw_idx, , drop = FALSE]
+    } else if (length(phi_count) == n_draw * 5) {
+      phi_count <- matrix(phi_count, nrow = n_draw, byrow = FALSE)[draw_idx, , drop = FALSE]
+    }
+  }
   n_draw <- dim(eta_pred)[1]
 }
 
@@ -67,11 +80,17 @@ sample_pa_draws <- function(pa_vec, n_draw, cv) {
     nrow = n_draw
   )
 }
-draw_poisson <- function(rate_mat, exposure_mat) {
+draw_counts <- function(rate_mat, exposure_mat, phi_draw = NULL) {
   lambda <- rate_mat * exposure_mat
   out <- matrix(NA_real_, nrow = nrow(rate_mat), ncol = ncol(rate_mat))
   valid <- is.finite(lambda) & lambda >= 0 & is.finite(exposure_mat) & exposure_mat > 0
-  out[valid] <- rpois(sum(valid), lambda[valid])
+  if (is.null(phi_draw)) {
+    out[valid] <- rpois(sum(valid), lambda[valid])
+    return(out)
+  }
+  phi_mat <- matrix(phi_draw, nrow = nrow(rate_mat), ncol = ncol(rate_mat))
+  valid <- valid & is.finite(phi_mat) & phi_mat > 0
+  out[valid] <- rnbinom(sum(valid), mu = lambda[valid], size = phi_mat[valid])
   out
 }
 set.seed(set_seed)
@@ -79,10 +98,16 @@ pa <- sample_pa_draws(meta$PA_atc[keep], n_draw, pa_cv)
 
 inv_logit <- function(x) 1 / (1 + exp(-x))
 
-HR <- draw_poisson(exp(drop3(eta[, , 4, drop = FALSE])), pa)
-R <- draw_poisson(exp(drop3(eta[, , 2, drop = FALSE])), pa)
-RBI <- draw_poisson(exp(drop3(eta[, , 3, drop = FALSE])), pa)
-SB <- draw_poisson(exp(drop3(eta[, , 5, drop = FALSE])), pa)
+get_phi <- function(k) {
+  if (is.null(phi_count)) return(NULL)
+  if (is.matrix(phi_count)) return(phi_count[, k])
+  if (length(phi_count) == n_draw * 5) return(matrix(phi_count, nrow = n_draw, byrow = FALSE)[, k])
+  NULL
+}
+HR <- draw_counts(exp(drop3(eta[, , 4, drop = FALSE])), pa, get_phi(4))
+R <- draw_counts(exp(drop3(eta[, , 2, drop = FALSE])), pa, get_phi(2))
+RBI <- draw_counts(exp(drop3(eta[, , 3, drop = FALSE])), pa, get_phi(3))
+SB <- draw_counts(exp(drop3(eta[, , 5, drop = FALSE])), pa, get_phi(5))
 OBP <- inv_logit(drop3(eta[, , 7, drop = FALSE]))
 SLG <- pmax(exp(drop3(eta[, , 8, drop = FALSE])) - 1e-4, 0)
 
